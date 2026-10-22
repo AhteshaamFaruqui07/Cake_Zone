@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CakeZone - Sign In</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container": "#f2ecf4",
+            "on-secondary-container": "#645a7d",
+            "on-secondary": "#ffffff",
+            "on-secondary-fixed": "#1f1635",
+            "tertiary": "#765b00",
+            "primary-container": "#6750a4",
+            "surface-bright": "#fdf7ff",
+            "primary": "#4f378a",
+            "on-primary-container": "#e0d2ff",
+            "surface-container-low": "#f8f2fa",
+            "on-secondary-fixed-variant": "#4b4263",
+            "tertiary-container": "#c9a74d",
+            "on-primary": "#ffffff",
+            "primary-fixed-dim": "#cfbcff",
+            "background": "#fdf7ff",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-highest": "#e6e0e9",
+            "surface": "#fdf7ff",
+            "surface-tint": "#6750a4",
+            "on-tertiary-container": "#503d00",
+            "inverse-surface": "#322f35",
+            "inverse-on-surface": "#f5eff7",
+            "error-container": "#ffdad6",
+            "on-error": "#ffffff",
+            "on-primary-fixed": "#22005d",
+            "tertiary-fixed-dim": "#e7c365",
+            "on-error-container": "#93000a",
+            "secondary-container": "#e1d4fd",
+            "on-primary-fixed-variant": "#4f378a",
+            "on-tertiary": "#ffffff",
+            "tertiary-fixed": "#ffdf93",
+            "surface-dim": "#ded8e0",
+            "on-surface": "#1d1b20",
+            "secondary-fixed": "#e9ddff",
+            "on-background": "#1d1b20",
+            "inverse-primary": "#cfbcff",
+            "on-tertiary-fixed-variant": "#594400",
+            "secondary-fixed-dim": "#cdc0e9",
+            "outline-variant": "#cbc4d2",
+            "outline": "#7a7582",
+            "error": "#ba1a1a",
+            "primary-fixed": "#e9ddff",
+            "surface-variant": "#e6e0e9",
+            "secondary": "#63597c"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "fontFamily": {
+            "headline": ["Public Sans"],
+            "display": ["Public Sans"],
+            "body": ["Public Sans"],
+            "label": ["Public Sans"]
+          }
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-background text-on-background font-body min-h-full flex flex-col justify-between">
+<!-- TopNavBar Component -->
+<nav class="bg-surface sticky top-0 z-50 w-full border-b border-outline-variant shadow-sm">
+<div class="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-full object-cover shadow-sm" data-alt="A luxurious minimalist logo design for a high-end artisanal pastry brand named CakeZone, featuring elegant dark brown and rose gold typographic accents on a clean light background, evoking a sense of refined modern confectionery excellence." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCtGwfamoWtmt5u344pIkL7As-GBsfcyExPz5SrzPuNio4NCOhWz-xk8j2pGXw3DvdD23tRVbL1ks4doTiqQ3K0CLEmnfIXN1gqT0HTY3Fe8pR9NLr-hOhhsCOSG1xRZ5dEMnJJwlWgnX07LXOVckSdAGdnX67X628kmktYo0ejqcrkog5tckJ4Cq94lzVuFKKR-XreRgkpLHaqUNEEWX8B3HRw6yvqrZC5WSl9cr44LZx5SGEd1hQCXCY2MdsnBXPnw"/>
+<span class="text-xl font-black text-primary">CakeZone</span>
+</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-sm font-label text-on-surface-variant hover:text-primary transition-colors" href="#">Home</a>
+<a class="text-sm font-label text-on-surface-variant hover:text-primary transition-colors" href="#">Collections</a>
+<a class="text-sm font-label text-on-surface-variant hover:text-primary transition-colors" href="#">About</a>
+<a class="text-sm font-label text-on-surface-variant hover:text-primary transition-colors" href="#">Custom Cakes</a>
+<a class="text-sm font-label text-on-surface-variant hover:text-primary transition-colors" href="#">Contact</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors active:scale-95">
+<span class="material-symbols-outlined">shopping_bag</span>
+</button>
+</div>
+</div>
+</nav>
+<!-- Main Login Content -->
+<main class="flex-grow flex items-center justify-center px-4 py-12">
+<div class="w-full max-w-md bg-surface-container-low rounded-xl shadow-xl border border-outline-variant p-8 md:p-10">
+<div class="text-center mb-8">
+<h1 class="text-2xl md:text-3xl font-headline font-bold text-primary mb-2">Welcome Back</h1>
+<p class="text-sm text-on-surface-variant">Sign in to experience artisanal luxury delivered to your doorstep.</p>
+</div>
+<form class="space-y-6" onsubmit="event.preventDefault();">
+<div>
+<label class="block text-sm font-label font-medium text-on-surface mb-2">Email Address</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 text-outline">
+<span class="material-symbols-outlined text-sm">mail</span>
+</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface border border-outline-variant rounded-xl text-on-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="name@example.com" required="" type="email"/>
+</div>
+</div>
+<div>
+<label class="block text-sm font-label font-medium text-on-surface mb-2">Password</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 text-outline">
+<span class="material-symbols-outlined text-sm">lock</span>
+</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface border border-outline-variant rounded-xl text-on-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="••••••••" required="" type="password"/>
+</div>
+</div>
+<div class="flex items-center justify-between text-sm">
+<label class="flex items-center gap-2 cursor-pointer">
+<input class="rounded border-outline text-primary focus:ring-primary w-4 h-4" type="checkbox"/>
+<span class="text-on-surface-variant font-label">Remember me</span>
+</label>
+<a class="text-primary font-medium hover:underline" href="#">Forgot password?</a>
+</div>
+<button class="w-full py-3 px-4 bg-primary text-on-primary font-headline font-semibold rounded-xl shadow-md hover:opacity-95 transition-all active:scale-95 flex items-center justify-center gap-2" type="submit">
+<span>Sign In</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+<div class="relative flex py-2 items-center">
+<div class="flex-grow border-t border-outline-variant"></div>
+<span class="flex-shrink mx-4 text-xs font-label text-outline uppercase tracking-wider">or continue with</span>
+<div class="flex-grow border-t border-outline-variant"></div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center gap-2 py-2.5 px-4 bg-surface border border-outline-variant rounded-xl text-sm font-label text-on-surface hover:bg-surface-container transition-all active:scale-95" type="button">
+<span class="material-symbols-outlined text-base">public</span>
+<span>Google</span>
+</button>
+<button class="flex items-center justify-center gap-2 py-2.5 px-4 bg-surface border border-outline-variant rounded-xl text-sm font-label text-on-surface hover:bg-surface-container transition-all active:scale-95" type="button">
+<span class="material-symbols-outlined text-base">phone_iphone</span>
+<span>Apple</span>
+</button>
+</div>
+<p class="text-center text-sm text-on-surface-variant mt-6">
+          Don't have an account? 
+          <a class="text-primary font-medium hover:underline" href="#">Sign up</a>
+</p>
+</form>
+</div>
+</main>
+<!-- Footer Component -->
+<footer class="bg-surface-container-low w-full border-t border-outline-variant">
+<div class="flex flex-col md:flex-row justify-between items-center px-6 py-8 max-w-7xl mx-auto gap-6">
+<div class="flex items-center gap-3">
+<span class="text-lg font-bold text-primary">CakeZone</span>
+<span class="text-sm text-on-surface-variant">© 2023 CakeZone. All rights reserved.</span>
+</div>
+<div class="flex flex-wrap justify-center gap-6 text-sm">
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">FAQ</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Shipping Info</a>
+</div>
+</div>
+</footer>
+</body></html>

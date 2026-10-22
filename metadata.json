@@ -1,0 +1,6 @@
+{
+  "name": "CakeZone - Luxury Artisanal Patisserie",
+  "description": "Artisanal luxury patisserie boutique offering handcrafted signature cakes, bespoke cake configurator, seamless authentication, and master baker management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

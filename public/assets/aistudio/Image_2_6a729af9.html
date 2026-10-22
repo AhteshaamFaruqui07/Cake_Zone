@@ -1,0 +1,371 @@
+<!DOCTYPE html><html class="scroll-smooth" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>CakeZone - Luxury Artisanal Cake Boutique</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-primary-fixed": "#22005d",
+            "tertiary-fixed": "#ffdf93",
+            "inverse-primary": "#cfbcff",
+            "secondary-fixed-dim": "#cdc0e9",
+            "on-surface": "#1d1b20",
+            "on-error": "#ffffff",
+            "on-error-container": "#93000a",
+            "on-background": "#1d1b20",
+            "on-tertiary": "#ffffff",
+            "surface-variant": "#e6e0e9",
+            "secondary": "#63597c",
+            "surface-tint": "#6750a4",
+            "on-secondary-fixed-variant": "#4b4263",
+            "on-secondary-fixed": "#1f1635",
+            "primary-fixed-dim": "#cfbcff",
+            "background": "#fdf7ff",
+            "primary": "#4f378a",
+            "on-tertiary-fixed-variant": "#594400",
+            "on-surface-variant": "#494551",
+            "secondary-container": "#e1d4fd",
+            "error-container": "#ffdad6",
+            "primary-fixed": "#e9ddff",
+            "primary-container": "#6750a4",
+            "surface-bright": "#fdf7ff",
+            "on-secondary-container": "#645a7d",
+            "surface-dim": "#ded8e0",
+            "surface-container-highest": "#e6e0e9",
+            "on-tertiary-fixed": "#241a00",
+            "on-primary-fixed-variant": "#4f378a",
+            "outline": "#7a7582",
+            "inverse-surface": "#322f35",
+            "surface-container-high": "#ece6ee",
+            "on-tertiary-container": "#503d00",
+            "surface-container": "#f2ecf4",
+            "surface": "#fdf7ff",
+            "on-primary-container": "#e0d2ff",
+            "on-secondary": "#ffffff",
+            "secondary-fixed": "#e9ddff",
+            "tertiary": "#765b00",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-fixed-dim": "#e7c365",
+            "outline-variant": "#cbc4d2",
+            "on-primary": "#ffffff",
+            "surface-container-low": "#f8f2fa",
+            "inverse-on-surface": "#f5eff7",
+            "tertiary-container": "#c9a74d",
+            "error": "#ba1a1a"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "fontFamily": {
+            "headline": ["Public Sans"],
+            "display": ["Public Sans"],
+            "body": ["Public Sans"],
+            "label": ["Public Sans"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .fade-in-up {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    }
+    .fade-in-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<header class="bg-surface/80 dark:bg-surface/80 backdrop-blur-md sticky top-0 z-50 w-full shadow-sm">
+<div class="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto">
+<a class="text-xl font-black text-primary dark:text-inverse-primary tracking-tight" href="#"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuA4Io_W0pu-fW8Qw6maF1IytASiCYuYf4uoo74LdQEKUgNETwBEIcXIwaSzOl6_zhs6Gbv1hnqmLZ-9mTVSZKIvcrZxxeuIwHnCmVZ_hnMyQwY82xksFKQpw-6iKYCvMu0yeoFJZ0CJUZgTfMztDjCtURxRs24z48PW9S_ddcwSCdyaAEjm5OmRZrQkTJOdBc3o0TS_st7E86dFVRa8LSz1WzDDe7EATJqRbnNcMQwMrMr3PN1YWzXKMF9N6bK8SKFE4iUtqdbCKll7EQ" alt="CakeZone Logo" class="w-auto object-contain h-16"></a>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-primary font-bold border-b-2 border-primary pb-1" href="#home">Home</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:text-primary transition-colors" href="#collections">Collections</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:text-primary transition-colors" href="#about">About</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:text-primary transition-colors" href="#custom-cakes">Custom Cakes</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:text-primary transition-colors" href="#contact">Contact</a><a class="text-on-surface-variant hover:text-on-surface hover:text-primary transition-colors" href="#login">Login</a>
+</nav>
+<div class="flex items-center gap-4">
+<button aria-label="Shopping Bag" class="relative p-2 text-on-surface hover:text-primary transition-colors active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl">shopping_bag</span>
+<span class="absolute top-0 right-0 bg-primary text-on-primary text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">3</span>
+</button>
+</div>
+</div>
+</header>
+<main>
+<!-- Hero Section -->
+<section class="relative overflow-hidden pt-12 pb-24 md:py-32" id="home">
+<div class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+<div class="fade-in-up flex flex-col items-start gap-6 visible">
+<span class="px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container font-label text-sm font-bold tracking-wide">LUXURY ARTISANAL BAKERY</span>
+<h1 class="text-4xl md:text-6xl font-black font-headline tracking-tight text-on-surface leading-tight">
+            Crafted with Love, Baked to Perfection
+          </h1>
+<p class="text-lg text-on-surface-variant leading-relaxed">
+            Experience the pinnacle of patisserie craftsmanship. Each creation is meticulously handcrafted using rare ingredients, French butter, and uncompromising passion.
+          </p>
+<div class="flex flex-wrap gap-4 pt-2">
+<a class="px-8 py-4 rounded-xl bg-primary text-on-primary font-label font-bold shadow-lg hover:bg-primary/90 transition-all transform active:scale-95" href="#collections">Explore Collections</a>
+<a class="px-8 py-4 rounded-xl bg-secondary-container text-on-secondary-container font-label font-bold hover:bg-secondary-container/80 transition-all transform active:scale-95" href="#custom-cakes">Design Custom Cake</a>
+</div>
+</div>
+<div class="fade-in-up relative flex justify-center visible">
+<div class="absolute -inset-4 bg-gradient-to-tr from-primary-container/20 to-tertiary-container/20 rounded-full blur-2xl -z-10"></div>
+<img class="rounded-2xl shadow-2xl object-cover w-full max-w-md h-[450px]" data-alt="A luxurious multi-tiered artisanal wedding cake adorned with delicate edible gold leaf, fresh cascading pastel sugar roses, and glossy dark chocolate ganache drips, set against a warm, soft-focus pastel-toned bakery backdrop with elegant dramatic lighting highlighting the fine textures." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJlNM16ulk1Up7BOPjHjzyPzXvUQjB1oFwrEdVZU5AMg7QgA9dlc1ZVaIBtwkDVhqwih1cn3XRcqd4InWU5V3Bh1Fzy7uY8GNI05CjyILLrLyvPGU36biebVsN8RMAXx7NzhG08jLx_lcITcItaRJGkdNGc3lA6PJIQF-fEcYBfYgmlxHNSpf2NCuBPei2hawlqX3dW4SRRjq2dPCYsQW0JKFSesTN-g6ZCIAVlDLQ7anKQvpWD-zP">
+</div>
+</div>
+</section>
+<!-- Signature Collections Section -->
+<section class="py-24 bg-surface-container-low" id="collections">
+<div class="max-w-7xl mx-auto px-6">
+<div class="text-center max-w-2xl mx-auto mb-16 fade-in-up visible">
+<span class="text-primary font-bold text-sm tracking-widest uppercase">SIGNATURE CREATIONS</span>
+<h2 class="text-3xl md:text-4xl font-black font-headline mt-2 text-on-surface">Indulge in Extraordinary Flavors</h2>
+<p class="text-on-surface-variant mt-4">Discover our most celebrated masterpiece cakes, ready to elevate your most cherished celebrations.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+<!-- Card 1 -->
+<div class="fade-in-up bg-surface rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group visible">
+<div class="relative overflow-hidden aspect-square">
+<img class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" data-alt="A decadent red velvet cake slice featuring rich crimson sponge layers filled with smooth cream cheese frosting, elegantly garnished with fresh plump blackberries, raspberries, and a dusting of powdered sugar on a pristine white ceramic plate." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB9DiUZ0jTeohGPTjZTuvzBL2Nec7Sc_o85m4jEIdHHXEr5InuqH8lxaueM6qLTVr4GMCbkhNlItt1gpTkU2LKLIiIOJ6RH1MS4Va-rsD-UPbdmROC21BCho5HkHJFQ9_f_Y-u4bGfXcGgC2HcHcj6Rs3d58ACwvbtg-VHGhcHzwib9RrmU5bBLcHguPM8ho2ErFEGRS0miBeIuxL45trXzUfMTcT74roqPTnbLiROPoymn5LLQu5ts">
+<span class="absolute top-4 right-4 bg-surface/90 backdrop-blur-sm text-primary font-bold px-3 py-1 rounded-full text-sm">$68</span>
+</div>
+<div class="p-6 flex flex-col flex-grow justify-between gap-4">
+<div>
+<h3 class="font-headline font-bold text-xl text-on-surface">Velvet Berry Bliss</h3>
+<p class="text-sm text-on-surface-variant mt-1">Rich cocoa-infused red velvet sponge with Madagascar vanilla cream cheese.</p>
+</div>
+<div class="flex gap-2 pt-2">
+<button class="flex-1 py-2.5 rounded-lg border border-outline text-on-surface text-sm font-bold hover:bg-surface-variant transition-colors">Quick View</button>
+<button class="flex-1 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 transition-colors">Order Now</button>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="fade-in-up bg-surface rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group visible">
+<div class="relative overflow-hidden aspect-square">
+<img class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" data-alt="A lavish dark chocolate cake coated in mirror-smooth glossy ganache, exquisitely decorated with authentic edible gold leaf flakes and dark chocolate truffles, showcased in a sophisticated high-end patisserie studio." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA4a4tBcFBG0WWJ5qV5t3p7yFADXyhseAXygj8Ll0fZOh4QVS31Z7HzsDHBDhcj-gUYYJ3JSO-CFdND4NM5N_Fw6LtEtiJ7EB_9D3nldgWK6HTwJM8tbD4Gr_cByx23ed9gG7NCk_R3mEI4SRI6m-q1Jpq388ETrAF4eOX1PZS_sAktOEyWjL9GekiTQPdAjoH7tDdexom1xfSTtTOvMEPa0Tq2XlHkc27vH1gsnJa4QDkCmYLXxXVL">
+<span class="absolute top-4 right-4 bg-surface/90 backdrop-blur-sm text-primary font-bold px-3 py-1 rounded-full text-sm">$85</span>
+</div>
+<div class="p-6 flex flex-col flex-grow justify-between gap-4">
+<div>
+<h3 class="font-headline font-bold text-xl text-on-surface">Gold Leaf Ganache</h3>
+<p class="text-sm text-on-surface-variant mt-1">Valrhona dark chocolate fudge layers wrapped in 24k edible gold leaf accents.</p>
+</div>
+<div class="flex gap-2 pt-2">
+<button class="flex-1 py-2.5 rounded-lg border border-outline text-on-surface text-sm font-bold hover:bg-surface-variant transition-colors">Quick View</button>
+<button class="flex-1 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 transition-colors">Order Now</button>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="fade-in-up bg-surface rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group visible">
+<div class="relative overflow-hidden aspect-square">
+<img class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" data-alt="An ethereal matcha green tea chiffon cake decorated with delicate piped white cream rosettes and minimalist matcha powder dusting, positioned against a serene minimalist Japanese-inspired background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyhqtgmcZ5Oth_k-L1yO2pe8oOZMUszxk9nOypmEF5AdJp-mZ3-z8NUiEDNTvf6qLpSoVH0gmALV5JelyigqnW5TRKXmHGsM94yzkTTJovO8xccqGWtoY7la-ePZXGNt4ag4wUNDAcFhqvQxxndN-W722JIrFaY-QzEQ1PKVruwCvsD6gRASbfcv8-mKPXe-XbV93KD1OTp0eOydjjQCbqZgPm1pdkMqRMOr2zZTHdWLX8PkgRJB6_">
+<span class="absolute top-4 right-4 bg-surface/90 backdrop-blur-sm text-primary font-bold px-3 py-1 rounded-full text-sm">$72</span>
+</div>
+<div class="p-6 flex flex-col flex-grow justify-between gap-4">
+<div>
+<h3 class="font-headline font-bold text-xl text-on-surface">Matcha Dream</h3>
+<p class="text-sm text-on-surface-variant mt-1">Ceremonial grade Uji matcha sponge with white chocolate mousse filling.</p>
+</div>
+<div class="flex gap-2 pt-2">
+<button class="flex-1 py-2.5 rounded-lg border border-outline text-on-surface text-sm font-bold hover:bg-surface-variant transition-colors">Quick View</button>
+<button class="flex-1 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 transition-colors">Order Now</button>
+</div>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="fade-in-up bg-surface rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group visible">
+<div class="relative overflow-hidden aspect-square">
+<img class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" data-alt="A gourmet salted caramel cake featuring fluffy golden sponge layers drenched in thick amber caramel drips, topped with artisanal sea salt flakes and crisp praline crunch." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBcSc_ePy1OnUpB1tpvBsQOoLLvUwMiB8vG272JCYQgHAEvETdLEz1aORn_40ZSRkSN-VyCmtj9I2YUi9ZA8Q0Fc1RS8dw9BJ11J6eyehshVZkHYrOWp_8SS8qXLCp9a7J2p86I4NMz1hoZ4Rv03SqVDjRDLe0piTP8cqBGB36wMn8jgKpVoyTiwQ74NFYAGrLfJDTpj_trds05d8D-ypaYWR_TtSVC-ujF7uxLloeuRdT3LYE5p35a">
+<span class="absolute top-4 right-4 bg-surface/90 backdrop-blur-sm text-primary font-bold px-3 py-1 rounded-full text-sm">$78</span>
+</div>
+<div class="p-6 flex flex-col flex-grow justify-between gap-4">
+<div>
+<h3 class="font-headline font-bold text-xl text-on-surface">Salted Caramel Symphony</h3>
+<p class="text-sm text-on-surface-variant mt-1">Brown butter sponge layered with house-made fleur de sel caramel and roasted pecans.</p>
+</div>
+<div class="flex gap-2 pt-2">
+<button class="flex-1 py-2.5 rounded-lg border border-outline text-on-surface text-sm font-bold hover:bg-surface-variant transition-colors">Quick View</button>
+<button class="flex-1 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 transition-colors">Order Now</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Our Craft / Story Section -->
+<section class="py-24 overflow-hidden" id="about">
+<div class="max-w-7xl mx-auto px-6 space-y-24">
+<!-- Feature 1 -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+<div class="fade-in-up visible">
+<span class="text-primary font-bold text-sm tracking-widest uppercase">UNCOMPROMISING QUALITY</span>
+<h2 class="text-3xl md:text-4xl font-black font-headline mt-2 text-on-surface">Rare &amp; Sustainably Sourced Ingredients</h2>
+<p class="text-on-surface-variant mt-4 leading-relaxed">
+              We travel the globe to source the finest ingredients—from organic Bourbon vanilla pods in Madagascar to single-origin cacao from Ecuador. Every element is selected with strict adherence to flavor integrity and ethical harvesting.
+            </p>
+</div>
+<div class="fade-in-up visible">
+<img class="rounded-2xl shadow-xl object-cover w-full h-[350px]" data-alt="A rustic wooden kitchen table neatly arranged with premium baking ingredients including glass jars of organic flour, dark chocolate bars, fresh eggs, and pods of Madagascar vanilla, illuminated by warm morning natural window light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJ6iwsBbhyRk5MvUgz7uo4Ws4yZmyXi9gRPPRqEDKQbZuuTen-06spSv-ZqDXfl6DnugHgS25AyVP_RzFwtr0-UngYWtDYhVMXtxA3jABh_egJ8zLNOceyxEJ_uGOTFplNFW0LFyRshJfnI_0bofpACGlren7oTSFJf4Mo1Ex4QwkvWyAebqXVNVf3Tk1Fobi1cDv9XbJlza5DqEeEl0qQ208XIpV0QshNLZJcUegJW1IhkRsxbpgy">
+</div>
+</div>
+<!-- Feature 2 -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+<div class="fade-in-up order-2 md:order-1 visible">
+<img class="rounded-2xl shadow-xl object-cover w-full h-[350px]" data-alt="An expert master pastry chef meticulously piping intricate buttercream flowers onto a multi-tiered wedding cake inside a bright, pristine professional stainless steel kitchen." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJHfUCbPbpFizayrPgDMCR1b4BFi7kge4aSFyzerD9SqFGKWGtiFfNnHTKh8gysph7WR20eCsm2yrvm37qQ_qg2DmTzPZNbzV7Jn9hJBFohsERF7_edNJvQpmMuXBM1fDqZtJkTefMPmBMCbZjD0dANCPT_ppHAHlJ1-hRWkSt-IpTNJA3aH5yB9OdVDMvSXkU0Uk_j1P10q4wYKBZKxrfPkuoWz4nfjwoMf6IYpW394O2Cvxq84mR">
+</div>
+<div class="fade-in-up order-1 md:order-2 visible">
+<span class="text-primary font-bold text-sm tracking-widest uppercase">MASTER ARTISANS</span>
+<h2 class="text-3xl md:text-4xl font-black font-headline mt-2 text-on-surface">Sculpted by World-Class Pastry Chefs</h2>
+<p class="text-on-surface-variant mt-4 leading-relaxed">
+              Our brigade of master bakers and sugar artists combine classical French patisserie techniques with avant-garde modern design, turning edible treats into breathtaking contemporary sculptures.
+            </p>
+</div>
+</div>
+</div>
+</section>
+<!-- Custom Cake Builder CTA Banner -->
+<section class="py-20 bg-primary-container text-on-primary-container relative overflow-hidden" id="custom-cakes">
+<div class="max-w-5xl mx-auto px-6 text-center relative z-10 fade-in-up visible">
+<span class="px-4 py-1.5 rounded-full bg-surface/20 backdrop-blur-sm text-on-primary font-label text-sm font-bold tracking-wide">BESPOKE EXPERIENCE</span>
+<h2 class="text-3xl md:text-5xl font-black font-headline mt-6 text-on-primary">Design Your Dream Custom Cake</h2>
+<p class="text-on-primary-container/90 mt-4 max-w-2xl mx-auto text-lg">
+          Have a unique vision? Use our interactive configurator to select tiers, custom fillings, color palettes, and bespoke sugar artistry for your special event.
+        </p>
+<div class="mt-8">
+<a class="inline-block px-8 py-4 rounded-xl bg-surface text-primary font-label font-bold shadow-xl hover:bg-surface-bright transition-all transform active:scale-95" href="#">Launch Cake Configurator</a>
+</div>
+</div>
+</section>
+<!-- Customer Reviews Section -->
+<section class="py-24 bg-surface-container-low">
+<div class="max-w-7xl mx-auto px-6">
+<div class="text-center max-w-2xl mx-auto mb-16 fade-in-up visible">
+<span class="text-primary font-bold text-sm tracking-widest uppercase">TESTIMONIALS</span>
+<h2 class="text-3xl md:text-4xl font-black font-headline mt-2 text-on-surface">Loved by Connoisseurs Worldwide</h2>
+<p class="text-on-surface-variant mt-4">Hear what our esteemed clients have to say about their unforgettable CakeZone experiences.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Review 1 -->
+<div class="fade-in-up bg-surface p-8 rounded-2xl shadow-sm flex flex-col justify-between visible">
+<div>
+<div class="flex text-tertiary gap-1 mb-4">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<p class="text-on-surface-variant italic leading-relaxed">"The Gold Leaf Ganache cake was an absolute showstopper at our anniversary gala. Not only did it look like high art, but the taste was impeccably balanced and rich."</p>
+</div>
+<div class="mt-6 flex items-center gap-4 pt-4 border-t border-outline-variant">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center font-bold text-on-secondary-container">EV</div>
+<div>
+<h4 class="font-bold text-on-surface">Eleanor Vance</h4>
+<p class="text-xs text-on-surface-variant">Event Director, Manhattan</p>
+</div>
+</div>
+</div>
+<!-- Review 2 -->
+<div class="fade-in-up bg-surface p-8 rounded-2xl shadow-sm flex flex-col justify-between visible">
+<div>
+<div class="flex text-tertiary gap-1 mb-4">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<p class="text-on-surface-variant italic leading-relaxed">"Ordering custom tiered cakes used to be stressful, but CakeZone's bespoke service made it effortless. The Matcha Dream cake exceeded all expectations!"</p>
+</div>
+<div class="mt-6 flex items-center gap-4 pt-4 border-t border-outline-variant">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center font-bold text-on-secondary-container">JL</div>
+<div>
+<h4 class="font-bold text-on-surface">Julian Laurent</h4>
+<p class="text-xs text-on-surface-variant">Food Critic</p>
+</div>
+</div>
+</div>
+<!-- Review 3 -->
+<div class="fade-in-up bg-surface p-8 rounded-2xl shadow-sm flex flex-col justify-between visible">
+<div>
+<div class="flex text-tertiary gap-1 mb-4">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<p class="text-on-surface-variant italic leading-relaxed">"Unmatched quality! The Velvet Berry Bliss cake was moist, decadent, and had the most refined cream cheese frosting I've ever tasted. Highly recommended."</p>
+</div>
+<div class="mt-6 flex items-center gap-4 pt-4 border-t border-outline-variant">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center font-bold text-on-secondary-container">SM</div>
+<div>
+<h4 class="font-bold text-on-surface">Sophia Martinez</h4>
+<p class="text-xs text-on-surface-variant">Private Client</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-low dark:bg-surface-container w-full border-t border-outline-variant" id="contact">
+<div class="flex flex-col md:flex-row justify-between items-center px-6 py-8 max-w-7xl mx-auto gap-6">
+<div class="text-lg font-bold text-primary">CakeZone</div>
+<div class="flex flex-wrap justify-center gap-6 text-sm font-label">
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">FAQ</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Shipping Info</a>
+</div>
+<div class="text-sm text-on-surface-variant">
+        © 2023 CakeZone. All rights reserved.
+      </div>
+</div>
+</footer>
+<script>
+    // Intersection Observer for scroll reveal animations
+    document.addEventListener("DOMContentLoaded", function () {
+      const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1
+      };
+
+      const observer = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, observerOptions);
+
+      document.querySelectorAll('.fade-in-up').forEach(el => {
+        observer.observe(el);
+      });
+    });
+  </script>
+
+
+</body></html>
