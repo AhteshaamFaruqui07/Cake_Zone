@@ -178,41 +178,55 @@ export const SignIn: React.FC<SignInProps> = ({
   };
 
   return (
-    <div className="min-h-full flex flex-col justify-between flex-grow">
+    <div className="min-h-full flex flex-col justify-between flex-grow pt-2 sm:pt-4">
       {/* Main Login Content */}
-      <main className="flex-grow flex items-center justify-center px-4 py-16">
-        <div className="w-full max-w-md bg-surface-container-low rounded-xl shadow-xl border border-outline-variant p-8 md:p-10">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl md:text-3xl font-headline font-bold text-primary mb-2">
+      <main className="flex-grow flex items-center justify-center px-4 pt-2 sm:pt-4 pb-12">
+        <div className="relative w-full max-w-md bg-surface-container-lowest/95 backdrop-blur-md rounded-2xl shadow-xl hover:shadow-2xl border border-outline-variant/60 p-8 sm:p-10 transition-all duration-300 -mt-2 sm:-mt-5 overflow-hidden">
+          {/* Subtle Top Luxury Accent Stripe */}
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
+
+          <div className="text-center mb-7">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 text-primary mb-3 shadow-xs">
+              <span className="material-symbols-outlined text-2xl">cake</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface tracking-tight mb-2">
               Welcome Back
             </h1>
-            <p className="text-sm text-on-surface-variant">
-              Sign in to experience artisanal luxury delivered to your doorstep.
+            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed max-w-xs mx-auto">
+              Sign in to manage your orders, bespoke cakes & exclusive privileges.
             </p>
           </div>
 
           {/* Success Banner when arriving from account creation */}
           {bannerMessage && (
-            <div className="mb-6 p-4 bg-primary/10 border border-primary/30 rounded-xl flex items-start gap-3">
-              <span className="material-symbols-outlined text-primary text-xl shrink-0 mt-0.5">check_circle</span>
-              <div className="text-left space-y-0.5">
-                <p className="text-xs font-bold text-primary">Account Created Successfully!</p>
-                <p className="text-xs text-on-surface-variant leading-relaxed">{bannerMessage}</p>
-              </div>
+            <div className="mb-6 px-4 py-3.5 bg-[#ebf9f2] border border-[#d2eee0] rounded-xl flex items-start gap-3">
+              <svg
+                className="w-5 h-5 text-[#3b8766] shrink-0 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.5l2 2 4-4.5" />
+              </svg>
+              <p className="text-[13px] sm:text-sm font-medium text-[#3b8766] leading-relaxed text-left">
+                {bannerMessage}
+              </p>
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-sm font-label font-medium text-on-surface mb-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">
                 Email Address
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-outline pointer-events-none">
-                  <span className="material-symbols-outlined text-sm">mail</span>
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-outline pointer-events-none">
+                  <span className="material-symbols-outlined text-lg">mail</span>
                 </span>
                 <input
-                  className="w-full pl-10 pr-4 py-3 bg-surface border border-outline-variant rounded-xl text-on-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-11 pr-4 py-3 bg-surface border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
                   placeholder="name@example.com"
                   required
                   type="email"
@@ -223,15 +237,28 @@ export const SignIn: React.FC<SignInProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-label font-medium text-on-surface mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetEmail(email);
+                    setShowForgotModal(true);
+                    setResetSent(false);
+                  }}
+                  className="text-xs font-medium text-primary hover:text-primary/80 hover:underline focus:outline-none cursor-pointer transition-colors"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-outline pointer-events-none">
-                  <span className="material-symbols-outlined text-sm">lock</span>
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-outline pointer-events-none">
+                  <span className="material-symbols-outlined text-lg">lock</span>
                 </span>
                 <input
-                  className="w-full pl-10 pr-4 py-3 bg-surface border border-outline-variant rounded-xl text-on-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  className="w-full pl-11 pr-4 py-3 bg-surface border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
                   placeholder="••••••••"
                   required
                   type="password"
@@ -241,59 +268,52 @@ export const SignIn: React.FC<SignInProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center justify-between text-sm pt-0.5">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <input
-                  className="rounded border-outline text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                  className="rounded border-outline/70 text-primary focus:ring-primary/20 focus:ring-2 w-4 h-4 cursor-pointer accent-primary"
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
                 />
-                <span className="text-on-surface-variant font-label">Remember me</span>
+                <span className="text-xs font-medium text-on-surface-variant">Remember me</span>
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setResetEmail(email);
-                  setShowForgotModal(true);
-                  setResetSent(false);
-                }}
-                className="text-primary font-medium hover:underline focus:outline-none text-sm"
-              >
-                Forgot password?
-              </button>
+              <span className="inline-flex items-center gap-1 text-[11px] text-outline font-medium">
+                <span className="material-symbols-outlined text-xs text-primary">verified_user</span>
+                Secure connection
+              </span>
             </div>
 
             <button
-              className="w-full py-3 px-4 bg-primary text-on-primary font-headline font-semibold rounded-xl shadow-md hover:opacity-95 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+              className="w-full py-3.5 px-4 bg-primary text-on-primary font-headline font-semibold text-sm rounded-xl shadow-md hover:shadow-lg hover:bg-primary/95 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed group"
               type="submit"
               disabled={loading}
             >
               <span>{loading ? 'Signing In...' : 'Sign In'}</span>
-              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
             </button>
 
             {/* Error Message Under Form Controls */}
             {errorMessage && (
-              <div>
+              <div className="p-3 bg-error/10 border border-error/20 rounded-xl">
                 <p className="text-xs text-error font-medium text-center leading-relaxed">
                   {errorMessage}
                 </p>
               </div>
             )}
 
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-outline-variant"></div>
-              <span className="flex-shrink mx-4 text-xs font-label text-outline uppercase tracking-wider">
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-outline-variant/60"></div>
+              <span className="flex-shrink mx-4 text-[11px] font-label font-semibold text-outline uppercase tracking-wider">
                 or continue with
               </span>
-              <div className="flex-grow border-t border-outline-variant"></div>
+              <div className="flex-grow border-t border-outline-variant/60"></div>
             </div>
 
             <div>
               <button
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-surface border border-outline-variant rounded-xl text-sm font-label font-medium text-on-surface hover:bg-surface-container transition-all active:scale-[0.99] cursor-pointer shadow-xs"
+                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-surface hover:bg-surface-container-low border border-outline-variant/80 hover:border-outline rounded-xl text-sm font-label font-medium text-on-surface shadow-xs hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
                 type="button"
               >
                 <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -318,13 +338,13 @@ export const SignIn: React.FC<SignInProps> = ({
               </button>
             </div>
 
-            <div className="text-center text-sm text-on-surface-variant mt-6 space-y-2">
+            <div className="text-center text-sm text-on-surface-variant pt-2 space-y-2">
               <p>
                 Don't have an account?{' '}
                 <button
                   type="button"
                   onClick={() => onNavigate('signup')}
-                  className="text-primary font-semibold hover:underline cursor-pointer"
+                  className="text-primary font-semibold hover:underline cursor-pointer transition-colors"
                 >
                   Sign up
                 </button>

@@ -277,12 +277,13 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container relative">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-14 left-1/2 transform -translate-x-1/2 z-50 bg-primary text-on-primary px-5 py-2.5 rounded-full shadow-xl text-xs font-semibold flex items-center gap-2 animate-bounce">
-          <span className="material-symbols-outlined text-sm">check_circle</span>
-          <span>{toastMessage}</span>
+        <div className="fixed top-20 sm:top-24 left-1/2 transform -translate-x-1/2 z-[100] bg-primary text-on-primary px-6 py-3 rounded-full shadow-2xl text-xs sm:text-sm font-semibold flex items-center gap-2.5 animate-bounce">
+          <span className="material-symbols-outlined text-base">check_circle</span>
+          <span className="tracking-wide">{toastMessage}</span>
           <button
             onClick={() => setToastMessage(null)}
-            className="ml-2 hover:opacity-80 text-xs"
+            className="ml-2 hover:opacity-80 p-0.5 rounded-full hover:bg-black/10 transition-colors text-xs"
+            aria-label="Close notification"
           >
             ✕
           </button>
