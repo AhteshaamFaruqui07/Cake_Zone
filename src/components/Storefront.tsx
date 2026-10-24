@@ -49,21 +49,6 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
   return (
     <div className="w-full">
-      {/* Guest Mode Notice Banner */}
-      {!isLoggedIn && (
-        <div className="bg-primary/10 border-b border-primary/20 px-6 py-2.5 text-center text-xs text-primary font-medium flex items-center justify-center gap-2">
-          <span className="material-symbols-outlined text-sm">lock</span>
-          <span>Sign in required to navigate, customize cakes, or place orders.</span>
-          <button
-            type="button"
-            onClick={() => onRequireAuth?.('sign in')}
-            className="font-bold underline cursor-pointer hover:opacity-80"
-          >
-            Sign In Now
-          </button>
-        </div>
-      )}
-
       {/* Hero Section with Full Background Video */}
       <section
         className="relative overflow-hidden min-h-[580px] md:min-h-[660px] flex items-center pt-12 pb-24 md:py-32"
