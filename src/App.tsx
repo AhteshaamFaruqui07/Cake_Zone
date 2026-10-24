@@ -46,8 +46,24 @@ export default function App() {
     const verifyInitialSessionAndRoute = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        if (window.opener && window.name === 'CakeZoneGoogleAuth') {
+          window.opener.postMessage(
+            {
+              type: 'SUPABASE_OAUTH_SUCCESS',
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            },
+            '*'
+          );
+          window.close();
+          return;
+        }
         const userEmail = session.user.email || '';
-        const name = session.user.user_metadata?.full_name || userEmail.split('@')[0] || 'Member';
+        const name =
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          userEmail.split('@')[0] ||
+          'Member';
         const isAdmin = userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
         setCurrentUser({
           name,
@@ -83,9 +99,19 @@ export default function App() {
         if (params.get('signup') === 'success') {
           setAuthSuccessMessage('Your account has been created. Please check your email and verify your address before logging in.');
         }
-        setCurrentScreen('signin');
+        if (session?.user && !params.get('signup')) {
+          window.history.replaceState(null, '', '/');
+          setCurrentScreen('storefront');
+        } else {
+          setCurrentScreen('signin');
+        }
       } else if (path === '/signup') {
-        setCurrentScreen('signup');
+        if (session?.user) {
+          window.history.replaceState(null, '', '/');
+          setCurrentScreen('storefront');
+        } else {
+          setCurrentScreen('signup');
+        }
       }
     };
 
@@ -97,8 +123,24 @@ export default function App() {
       }
 
       if (session?.user) {
+        if (window.opener && window.name === 'CakeZoneGoogleAuth') {
+          window.opener.postMessage(
+            {
+              type: 'SUPABASE_OAUTH_SUCCESS',
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            },
+            '*'
+          );
+          window.close();
+          return;
+        }
         const userEmail = session.user.email || '';
-        const name = session.user.user_metadata?.full_name || userEmail.split('@')[0] || 'Member';
+        const name =
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          userEmail.split('@')[0] ||
+          'Member';
         const isAdmin = userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
         setCurrentUser({
           name,
@@ -106,10 +148,24 @@ export default function App() {
           initials: (name.slice(0, 2) || 'CZ').toUpperCase(),
           email: userEmail,
         });
+        if (event === 'SIGNED_IN') {
+          setCurrentScreen((prev) => (prev === 'signin' || prev === 'signup' ? 'storefront' : prev));
+        }
       } else {
         setCurrentUser(null);
       }
     });
+
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type === 'SUPABASE_OAUTH_SUCCESS' && event.data.access_token) {
+        await supabase.auth.setSession({
+          access_token: event.data.access_token,
+          refresh_token: event.data.refresh_token,
+        });
+        window.history.replaceState(null, '', '/');
+        setCurrentScreen('storefront');
+      }
+    };
 
     const handlePopState = async () => {
       const path = window.location.pathname;
@@ -137,10 +193,12 @@ export default function App() {
       }
     };
 
+    window.addEventListener('message', handleMessage);
     window.addEventListener('popstate', handlePopState);
 
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('message', handleMessage);
       window.removeEventListener('popstate', handlePopState);
     };
   }, []);

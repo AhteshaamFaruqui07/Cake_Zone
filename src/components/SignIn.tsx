@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ScreenType } from '../types';
-import { supabase } from '../supabaseClient';
+import { supabase, signInWithGoogle } from '../supabaseClient';
 
 interface SignInProps {
   onNavigate: (screen: ScreenType) => void;
@@ -149,31 +149,14 @@ export const SignIn: React.FC<SignInProps> = ({
   };
 
   const handleGoogleSignIn = async () => {
+    setErrorMessage('');
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/`,
-        },
-      });
+      const { error } = await signInWithGoogle();
       if (error) {
-        console.warn('OAuth notice:', error.message);
-        onLoginSuccess({
-          name: 'Eleanor Vance',
-          role: 'VIP Customer',
-          initials: 'EV',
-          email: 'eleanor.vance@gmail.com',
-        });
-        onNavigate('storefront');
+        setErrorMessage(error.message);
       }
-    } catch {
-      onLoginSuccess({
-        name: 'Eleanor Vance',
-        role: 'VIP Customer',
-        initials: 'EV',
-        email: 'eleanor.vance@gmail.com',
-      });
-      onNavigate('storefront');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An unexpected error occurred during Google sign in.');
     }
   };
 
