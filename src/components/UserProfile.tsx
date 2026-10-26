@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ScreenType, CartItem } from '../types';
 import { supabase } from '../supabaseClient';
-import { fetchUserProfile, upsertUserProfile } from '../services/supabaseData';
+import {
+  fetchUserProfile,
+  upsertUserProfile,
+  uploadFileToAppStorage,
+  createSignedUrlForAppFile,
+  removeFileFromAppStorage,
+  syncProfileUploadedFilesInDb,
+  ProfileUploadedFile,
+} from '../services/supabaseData';
 
-interface UploadedProfileFile {
-  name: string;
-  size: number;
-  type: string;
-  dataUrl?: string;
-}
+type UploadedProfileFile = ProfileUploadedFile;
 
 interface UserProfileProps {
   user: {
@@ -49,15 +52,32 @@ export const UserProfile: React.FC<UserProfileProps> = ({
   const formSectionRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [currentAuthUserId, setCurrentAuthUserId] = useState<string>('');
+
   useEffect(() => {
     if (user) {
       setFullName(user.name);
       setEmail(user.email);
     }
 
+    // Clean up any legacy local storage keys
+    try {
+      localStorage.removeItem('cakezone_profile_files_default');
+    } catch {
+      // ignore storage errors
+    }
+
     const loadSupabaseUserDetails = async () => {
+      // Reset profile fields for the active user before loading their own records
+      setUploadedFiles([]);
+      setPhone('');
+      setCityCode('');
+      setAddress('');
+      setDietaryNotes('');
+
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
+        setCurrentAuthUserId(authUser.id);
         const meta = authUser.user_metadata || {};
         if (meta.full_name || meta.name) {
           setFullName(meta.full_name || meta.name);
@@ -78,13 +98,15 @@ export const UserProfile: React.FC<UserProfileProps> = ({
         if (meta.dietary_notes) {
           setDietaryNotes(meta.dietary_notes);
         }
-        if (Array.isArray(meta.uploaded_files)) {
-          setUploadedFiles(meta.uploaded_files);
+
+        let rawFiles: UploadedProfileFile[] = [];
+        if (Array.isArray(meta.uploaded_files) && meta.uploaded_files.length > 0) {
+          rawFiles = meta.uploaded_files.slice(-1);
         }
 
-        // Load row from Supabase 'profiles' table if available
+        // Load row from Supabase 'profiles' table for this specific user_id
         const { data: dbProfile } = await fetchUserProfile();
-        if (dbProfile) {
+        if (dbProfile && (!dbProfile.user_id || dbProfile.user_id === authUser.id)) {
           if (dbProfile.full_name) setFullName(dbProfile.full_name);
           if (dbProfile.email) setEmail(dbProfile.email);
           if (dbProfile.phone) {
@@ -93,10 +115,33 @@ export const UserProfile: React.FC<UserProfileProps> = ({
           if (dbProfile.city_code) setCityCode(dbProfile.city_code);
           if (dbProfile.address) setAddress(dbProfile.address);
           if (dbProfile.dietary_notes) setDietaryNotes(dbProfile.dietary_notes);
-          if (Array.isArray(dbProfile.uploaded_files) && dbProfile.uploaded_files.length > 0) {
-            setUploadedFiles(dbProfile.uploaded_files);
+          if (Array.isArray(dbProfile.uploaded_files)) {
+            rawFiles = dbProfile.uploaded_files.slice(-1);
           }
         }
+
+        // Resolve private bucket ("app-files") paths into signed URLs for display
+        const hydratedFiles: UploadedProfileFile[] = await Promise.all(
+          rawFiles
+            .filter((f) => {
+              const p = f?.storagePath || f?.path || '';
+              return Boolean(p && p.startsWith(`${authUser.id}/`));
+            })
+            .map(async (f) => {
+              const filePath = (f.storagePath || f.path || '').trim();
+              const signedUrl = await createSignedUrlForAppFile(filePath, 3600);
+              return {
+                name: f.name,
+                size: f.size,
+                type: f.type,
+                path: filePath,
+                storagePath: filePath,
+                dataUrl: signedUrl || undefined,
+              };
+            })
+        );
+
+        setUploadedFiles(hydratedFiles);
 
         if (authUser.created_at) {
           const date = new Date(authUser.created_at);
@@ -116,44 +161,109 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     };
 
     loadSupabaseUserDetails();
-  }, [user]);
+  }, [user?.email]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    Array.from(files).forEach((file) => {
-      if (file.type.startsWith('image/') && file.size <= 2 * 1024 * 1024) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          setUploadedFiles((prev) => [
-            ...prev,
-            {
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              dataUrl: typeof reader.result === 'string' ? reader.result : undefined,
-            },
-          ]);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setUploadedFiles((prev) => [
-          ...prev,
-          {
-            name: file.name,
-            size: file.size,
-            type: file.type || 'application/octet-stream',
-          },
-        ]);
-      }
-    });
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     e.target.value = '';
+
+    const isImage =
+      file.type.startsWith('image/') ||
+      /\.(png|jpe?g|webp|gif|avif|svg)$/i.test(file.name);
+
+    if (!isImage) {
+      setErrorMessage('Please upload an image file (PNG, JPG, WEBP) for your profile cover.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setSaveMessage(null);
+
+    try {
+      // Remove any previous cover file from Supabase Storage ("app-files") before replacing
+      for (const existingFile of uploadedFiles) {
+        const oldPath = existingFile.storagePath || existingFile.path;
+        if (oldPath) {
+          await removeFileFromAppStorage(oldPath);
+        }
+      }
+
+      // Upload new cover file to private bucket "app-files" under:
+      // ${auth.uid()}/profile-cover/${itemId}/${uuid}.${extension}
+      const { storagePath, signedUrl, error: uploadError } = await uploadFileToAppStorage({
+        file,
+        featureName: 'profile-cover',
+        itemId: currentAuthUserId || undefined,
+      });
+
+      if (uploadError || !storagePath) {
+        setErrorMessage(
+          uploadError?.message || 'Failed to upload cover image to Supabase Storage.'
+        );
+        return;
+      }
+
+      const next: UploadedProfileFile[] = [
+        {
+          name: file.name,
+          size: file.size,
+          type: file.type || 'image/jpeg',
+          path: storagePath,
+          storagePath,
+          dataUrl: signedUrl || undefined,
+        },
+      ];
+
+      setUploadedFiles(next);
+
+      // Save the returned file path in the profiles table & user metadata
+      const formattedPhone = phone.trim() ? `+91 ${phone.trim().replace(/^\+91\s*/, '')}` : '+91';
+      await syncProfileUploadedFilesInDb(next, {
+        full_name: fullName.trim() || user?.name || 'Member',
+        email: email.trim() || user?.email || '',
+        phone: formattedPhone,
+        city_code: cityCode.trim(),
+        address: address.trim(),
+        dietary_notes: dietaryNotes.trim(),
+      });
+
+      setSaveMessage('Profile cover image uploaded and saved.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to upload profile cover image.');
+    }
   };
 
-  const handleRemoveFile = (index: number) => {
-    setUploadedFiles((prev) => prev.filter((_, idx) => idx !== index));
+  const handleRemoveFile = async (index: number) => {
+    const targetFile = uploadedFiles[index];
+    const next = uploadedFiles.filter((_, idx) => idx !== index);
+    setUploadedFiles(next);
+    setErrorMessage(null);
+    setSaveMessage(null);
+
+    try {
+      // 1. Remove file from Supabase Storage ("app-files")
+      const targetPath = targetFile?.storagePath || targetFile?.path;
+      if (targetPath) {
+        await removeFileFromAppStorage(targetPath);
+      }
+
+      // 2. Remove file reference from the database ('profiles' table & auth metadata)
+      const formattedPhone = phone.trim() ? `+91 ${phone.trim().replace(/^\+91\s*/, '')}` : '+91';
+      await syncProfileUploadedFilesInDb(next, {
+        full_name: fullName.trim() || user?.name || 'Member',
+        email: email.trim() || user?.email || '',
+        phone: formattedPhone,
+        city_code: cityCode.trim(),
+        address: address.trim(),
+        dietary_notes: dietaryNotes.trim(),
+      });
+
+      setSaveMessage('Profile cover image removed.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to remove cover image.');
+    }
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -167,7 +277,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     const formattedPhone = phone.trim() ? `+91 ${phone.trim().replace(/^\+91\s*/, '')}` : '+91';
 
     try {
-      // 1. Upsert into Supabase 'profiles' table (RLS protected by auth.uid() = user_id)
+      // 1. Upsert into Supabase 'profiles' table (saves storagePath in uploaded_files)
       await upsertUserProfile({
         full_name: trimmedName,
         email: trimmedEmail,
@@ -176,14 +286,16 @@ export const UserProfile: React.FC<UserProfileProps> = ({
         address: address.trim(),
         dietary_notes: dietaryNotes.trim(),
         uploaded_files: uploadedFiles,
-        role: user?.role || 'VIP Member',
+        role: user?.role || 'Customer',
       });
 
-      // 2. Also keep Supabase auth user_metadata in sync
+      // 2. Also keep Supabase auth user_metadata in sync with the storage path
       const fileSummaries = uploadedFiles.map((f) => ({
         name: f.name,
         size: f.size,
         type: f.type,
+        path: f.storagePath || f.path || '',
+        storagePath: f.storagePath || f.path || '',
       }));
 
       const { error } = await supabase.auth.updateUser({
@@ -228,91 +340,113 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const avatarPreview = uploadedFiles.find((f) => f.dataUrl)?.dataUrl;
+  const coverImage = [...uploadedFiles].reverse().find((f) => f.dataUrl)?.dataUrl;
 
   return (
     <div className="min-h-full flex flex-col justify-between flex-grow bg-background">
       <main className="flex-grow max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
         {/* Top Profile Hero Banner */}
-        <section className="relative bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-lg overflow-hidden p-6 sm:p-8">
-          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
+        <section className="relative bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-lg overflow-hidden">
+          {/* Cover Image Banner */}
+          {coverImage ? (
+            <div className="relative h-40 sm:h-52 w-full overflow-hidden bg-surface-container">
+              <img
+                src={coverImage}
+                alt="Profile Cover"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute top-3.5 right-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/50 hover:bg-black/70 text-white backdrop-blur-md text-xs font-semibold transition-all cursor-pointer shadow-sm"
+              >
+                <span className="material-symbols-outlined text-sm">photo_camera</span>
+                <span>Change Cover</span>
+              </button>
+            </div>
+          ) : (
+            <div className="h-1.5 w-full bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
+          )}
 
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex items-center gap-5">
-              {avatarPreview ? (
-                <img
-                  src={avatarPreview}
-                  alt={fullName || 'Profile'}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-md border border-primary/20"
-                />
-              ) : (
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold text-2xl sm:text-3xl shadow-md border border-primary/20">
-                  {(fullName.slice(0, 2) || user?.initials || 'CZ').toUpperCase()}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface tracking-tight">
-                    {fullName || user?.name || 'CakeZone Member'}
-                  </h1>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
-                    <span className="material-symbols-outlined text-xs">verified</span>
-                    {user?.role || 'VIP Member'}
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-on-surface-variant flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-base text-outline">mail</span>
-                  {email || 'No email on file'}
-                </p>
-                <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-outline">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm text-primary">calendar_month</span>
-                    Member since {memberSince}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm text-primary">shield_lock</span>
-                    {authProvider}
-                  </span>
+          <div className={`p-6 sm:p-8 ${coverImage ? 'pt-4 sm:pt-5' : ''}`}>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex items-center gap-5">
+                {coverImage ? (
+                  <img
+                    src={coverImage}
+                    alt={fullName || 'Profile'}
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-md border-2 border-surface -mt-10 sm:-mt-12 relative z-10 bg-surface"
+                  />
+                ) : (
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold text-2xl sm:text-3xl shadow-md border border-primary/20">
+                    {(fullName.slice(0, 2) || user?.initials || 'CZ').toUpperCase()}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h1 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface tracking-tight">
+                      {fullName || user?.name || 'CakeZone Member'}
+                    </h1>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                      <span className="material-symbols-outlined text-xs">verified</span>
+                      {user?.role || 'VIP Member'}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-on-surface-variant flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-base text-outline">mail</span>
+                    {email || 'No email on file'}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-outline">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm text-primary">calendar_month</span>
+                      Member since {memberSince}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm text-primary">shield_lock</span>
+                      {authProvider}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  formSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
-                  fullNameInputRef.current?.focus();
-                }}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-semibold shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base">person_add</span>
-                Add Your Profile
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('storefront')}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
-              >
-                <span className="material-symbols-outlined text-base">storefront</span>
-                Browse Cakes
-              </button>
-              <button
-                type="button"
-                onClick={onOpenConfigurator}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
-              >
-                <span className="material-symbols-outlined text-base">cake</span>
-                Custom Cake Studio
-              </button>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-error/30 text-error hover:bg-error/10 text-xs font-semibold transition-all cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base">logout</span>
-                Sign Out
-              </button>
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    formSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    fullNameInputRef.current?.focus();
+                  }}
+                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-semibold shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">person_add</span>
+                  Add Your Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('storefront')}
+                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
+                >
+                  <span className="material-symbols-outlined text-base">storefront</span>
+                  Browse Cakes
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenConfigurator}
+                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
+                >
+                  <span className="material-symbols-outlined text-base">cake</span>
+                  Custom Cake Studio
+                </button>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-error/30 text-error hover:bg-error/10 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">logout</span>
+                  Sign Out
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -450,38 +584,45 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                 </div>
               </div>
 
-              {/* Row 4: Add Files */}
+              {/* Row 4: Profile Cover Image (Single File Only) */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">
-                  Add Files
+                  Profile Cover Image (1 File Only)
                 </label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-outline-variant/70 hover:border-primary/60 bg-surface hover:bg-surface-container-low/50 rounded-2xl p-5 text-center cursor-pointer transition-all"
+                  className="relative overflow-hidden border-2 border-dashed border-outline-variant/70 hover:border-primary/60 bg-surface hover:bg-surface-container-low/50 rounded-2xl p-5 text-center cursor-pointer transition-all"
                 >
+                  {coverImage && (
+                    <img
+                      src={coverImage}
+                      alt="Profile Cover Preview"
+                      className="absolute inset-0 w-full h-full object-cover opacity-25 pointer-events-none"
+                    />
+                  )}
                   <input
                     ref={fileInputRef}
                     type="file"
-                    multiple
+                    accept="image/*"
                     onChange={handleFileChange}
                     className="hidden"
                   />
-                  <div className="flex flex-col items-center justify-center gap-1.5">
+                  <div className="relative z-10 flex flex-col items-center justify-center gap-1.5">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                       <span className="material-symbols-outlined text-xl">upload_file</span>
                     </div>
                     <p className="text-xs sm:text-sm font-semibold text-on-surface">
-                      Click to Add Files
+                      {coverImage ? 'Click to Replace Profile Cover Image' : 'Click to Upload Cover Image'}
                     </p>
                     <p className="text-[11px] text-on-surface-variant">
-                      Upload profile photo, reference cake images, or celebration notes (PNG, JPG, PDF)
+                      Upload a single cover image for your profile (PNG, JPG, WEBP — 1 file only)
                     </p>
                   </div>
                 </div>
 
                 {uploadedFiles.length > 0 && (
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {uploadedFiles.map((file, idx) => (
+                  <div className="mt-3">
+                    {uploadedFiles.slice(0, 1).map((file, idx) => (
                       <div
                         key={`${file.name}-${idx}`}
                         className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/50"
@@ -495,7 +636,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                             />
                           ) : (
                             <span className="material-symbols-outlined text-primary text-xl shrink-0">
-                              description
+                              image
                             </span>
                           )}
                           <div className="min-w-0">
@@ -503,7 +644,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                               {file.name}
                             </p>
                             <p className="text-[11px] text-on-surface-variant">
-                              {formatFileSize(file.size)}
+                              {formatFileSize(file.size)} • Active Cover Image
                             </p>
                           </div>
                         </div>
@@ -511,7 +652,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                           type="button"
                           onClick={() => handleRemoveFile(idx)}
                           className="p-1 rounded-lg text-outline hover:text-error hover:bg-error/10 transition-colors cursor-pointer shrink-0"
-                          title="Remove file"
+                          title="Remove cover image"
                         >
                           <span className="material-symbols-outlined text-base">close</span>
                         </button>

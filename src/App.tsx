@@ -13,6 +13,8 @@ import {
   updateCartItemQuantityInDb,
   deleteCartItemFromDb,
   clearUserCartInDb,
+  isUserAdminSync,
+  resolveIsAdminFromSupabase,
 } from './services/supabaseData';
 import { Navbar } from './components/Navbar';
 import { Storefront } from './components/Storefront';
@@ -73,6 +75,8 @@ export default function App() {
 
     const verifyInitialSessionAndRoute = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      let isAdmin = false;
+
       if (session?.user) {
         if (window.opener && window.name === 'CakeZoneGoogleAuth') {
           window.opener.postMessage(
@@ -92,10 +96,10 @@ export default function App() {
           session.user.user_metadata?.name ||
           userEmail.split('@')[0] ||
           'Member';
-        const isAdmin = userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+        isAdmin = await resolveIsAdminFromSupabase(session.user);
         setCurrentUser({
           name,
-          role: isAdmin ? 'Admin' : 'VIP Member',
+          role: isAdmin ? 'Admin' : 'Customer',
           initials: (name.slice(0, 2) || 'CZ').toUpperCase(),
           email: userEmail,
         });
@@ -130,14 +134,12 @@ export default function App() {
           setCurrentScreen('signin');
           showToast('Please sign in to access your profile.');
         } else {
-          const userEmail = session.user.email || '';
-          const isAdmin =
-            userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
           if (isAdminRoute && isAdmin) {
             setCurrentScreen('dashboard');
           } else {
             if (isAdminRoute) {
               window.history.replaceState(null, '', '/profile');
+              showToast('Only Admin has privilege to access the dashboard.');
             }
             setCurrentScreen('profile');
           }
@@ -200,12 +202,17 @@ export default function App() {
           session.user.user_metadata?.name ||
           userEmail.split('@')[0] ||
           'Member';
-        const isAdmin = userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+        const syncAdmin = isUserAdminSync(session.user);
         setCurrentUser({
           name,
-          role: isAdmin ? 'Admin' : 'VIP Member',
+          role: syncAdmin ? 'Admin' : 'Customer',
           initials: (name.slice(0, 2) || 'CZ').toUpperCase(),
           email: userEmail,
+        });
+        resolveIsAdminFromSupabase(session.user).then((verifiedAdmin) => {
+          setCurrentUser((prev) =>
+            prev ? { ...prev, role: verifiedAdmin ? 'Admin' : 'Customer' } : prev
+          );
         });
         fetchCartItems().then(({ data: dbCart }) => {
           if (dbCart) {
@@ -253,12 +260,14 @@ export default function App() {
           showToast('Please sign in to access your profile.');
           return;
         }
-        const userEmail = session.user.email || '';
-        const isAdmin =
-          userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+        const isAdmin = await resolveIsAdminFromSupabase(session.user);
         if (isAdminRoute && isAdmin) {
           setCurrentScreen('dashboard');
         } else {
+          if (isAdminRoute) {
+            window.history.replaceState(null, '', '/profile');
+            showToast('Only Admin has privilege to access the dashboard.');
+          }
           setCurrentScreen('profile');
         }
       } else if (path === '/update-password' || path === '/reset-password') {
@@ -304,10 +313,9 @@ export default function App() {
         setCurrentScreen('signin');
         return;
       }
-      const userEmail = session.user.email || '';
-      const isAdmin =
-        userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+      const isAdmin = await resolveIsAdminFromSupabase(session.user);
       if (screen === 'dashboard' && !isAdmin) {
+        showToast('Only Admin has privilege to access the dashboard.');
         setCurrentScreen('profile');
         if (window.location.pathname !== '/profile') {
           window.history.pushState(null, '', '/profile');
@@ -373,6 +381,7 @@ export default function App() {
       ];
     });
     showToast(`Added ${quantity}x "${cake.name}" to your artisanal bag.`);
+    setIsCartOpen(true);
 
     const { data: savedItem } = await addCartItemToDb({
       cakeId: cake.id,

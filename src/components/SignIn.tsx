@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ScreenType } from '../types';
 import { supabase, signInWithGoogle } from '../supabaseClient';
+import { resolveIsAdminFromSupabase } from '../services/supabaseData';
 
 interface SignInProps {
   onNavigate: (screen: ScreenType) => void;
@@ -115,11 +116,18 @@ export const SignIn: React.FC<SignInProps> = ({
 
       if (data?.user) {
         const userEmail = data.user.email || email;
-        const isAdmin = userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+        const isAdmin = await resolveIsAdminFromSupabase(data.user);
         const user = {
-          name: data.user.user_metadata?.full_name || (isAdmin ? 'Master Baker' : userEmail.split('@')[0]),
+          name:
+            data.user.user_metadata?.full_name ||
+            data.user.user_metadata?.name ||
+            userEmail.split('@')[0],
           role: isAdmin ? 'Admin' : 'Customer',
-          initials: (data.user.user_metadata?.full_name?.slice(0, 2) || (isAdmin ? 'CZ' : userEmail.slice(0, 2))).toUpperCase(),
+          initials: (
+            data.user.user_metadata?.full_name?.slice(0, 2) ||
+            userEmail.slice(0, 2) ||
+            'CZ'
+          ).toUpperCase(),
           email: userEmail,
         };
         onLoginSuccess(user);

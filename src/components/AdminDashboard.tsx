@@ -7,6 +7,7 @@ import {
   updateOrderStatusInDb,
   fetchInventoryItems,
   updateInventoryItemInDb,
+  resolveIsAdminFromSupabase,
 } from '../services/supabaseData';
 
 interface AdminDashboardProps {
@@ -42,6 +43,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (!session) {
         window.history.replaceState(null, '', '/login');
         onNavigate('signin');
+        return;
+      }
+
+      const isAdmin = await resolveIsAdminFromSupabase(session.user);
+      if (!isAdmin) {
+        window.history.replaceState(null, '', '/profile');
+        onNavigate('profile');
         return;
       }
 
