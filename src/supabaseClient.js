@@ -18,6 +18,7 @@ const SUPABASE_PUBLIC_KEY = "sb_publishable_h0GaOUO53tBrG95yWRy8sQ_nVr7tnM1";
 // ============================================================================
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
 
+
 // ============================================================================
 // Google OAuth Sign-In Helper
 // ============================================================================

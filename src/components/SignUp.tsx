@@ -4,7 +4,7 @@ import { supabase, signInWithGoogle } from '../supabaseClient';
 
 interface SignUpProps {
   onNavigate: (screen: ScreenType) => void;
-  onSignUpSuccess: (email: string) => void;
+  onSignUpSuccess?: (email: string) => void;
 }
 
 export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) => {
@@ -20,6 +20,8 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
     e.preventDefault();
     setErrorMessage('');
 
+    const trimmedEmail = email.trim();
+
     if (password !== confirmPassword) {
       setErrorMessage('Passwords do not match. Please ensure both passwords match.');
       return;
@@ -33,8 +35,12 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
     setLoading(true);
 
     try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cakezone_signup_in_progress', 'true');
+      }
+
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: trimmedEmail,
         password,
         options: {
           data: {
@@ -44,6 +50,9 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
       });
 
       if (error) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('cakezone_signup_in_progress');
+        }
         if (error.message.toLowerCase().includes('rate limit')) {
           setErrorMessage(
             'Email rate limit exceeded (Supabase limit is 3-4 emails/hr). Fix: in your Supabase Dashboard, go to Authentication → Providers → Email and toggle OFF "Confirm email", or wait before trying again.'
@@ -55,14 +64,32 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
         return;
       }
 
-      // If a session was automatically created, sign out so the user must log in explicitly on the Sign In page
+      // Do NOT auto-login: if Supabase returned a session, sign out immediately
       if (data?.session) {
         await supabase.auth.signOut();
       }
 
-      // Redirect user to the Sign In page so they can re-enter their email and password
-      onSignUpSuccess(email.trim());
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('cakezone_signup_in_progress');
+        sessionStorage.setItem('cakezone_signup_email', trimmedEmail);
+        sessionStorage.setItem('cakezone_signup_success', 'true');
+        window.history.pushState(
+          { email: trimmedEmail, signupSuccess: true },
+          '',
+          `/login?email=${encodeURIComponent(trimmedEmail)}&signup=success`
+        );
+      }
+
+      // Redirect user to the Sign In page with their email pre-filled
+      if (onSignUpSuccess) {
+        onSignUpSuccess(trimmedEmail);
+      } else {
+        onNavigate('signin');
+      }
     } catch (err: any) {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('cakezone_signup_in_progress');
+      }
       setErrorMessage(err.message || 'An unexpected error occurred during sign up.');
     } finally {
       setLoading(false);

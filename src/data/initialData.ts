@@ -7,76 +7,112 @@ export const CHEFS_IMAGE_URL = 'https://lh3.googleusercontent.com/aida-public/AB
 
 export const SIGNATURE_CAKES: CakeProduct[] = [
   {
-    id: 'velvet-berry-bliss',
-    name: 'Velvet Berry Bliss',
-    price: 68,
-    description: 'Rich cocoa-infused red velvet sponge with Madagascar vanilla cream cheese.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB9DiUZ0jTeohGPTjZTuvzBL2Nec7Sc_o85m4jEIdHHXEr5InuqH8lxaueM6qLTVr4GMCbkhNlItt1gpTkU2LKLIiIOJ6RH1MS4Va-rsD-UPbdmROC21BCho5HkHJFQ9_f_Y-u4bGfXcGgC2HcHcj6Rs3d58ACwvbtg-VHGhcHzwib9RrmU5bBLcHguPM8ho2ErFEGRS0miBeIuxL45trXzUfMTcT74roqPTnbLiROPoymn5LLQu5ts',
-    ingredients: 'Ecuadorian cocoa, Bourbon vanilla beans, organic cultured cream cheese, fresh Oregon blackberries & raspberries.',
+    id: 'chocolate-truffle',
+    name: 'Chocolate Truffle',
+    price: 899,
+    rating: 4.8,
+    reviewsCount: 124,
+    category: 'Chocolate',
+    description: 'Decadent dark chocolate sponge layered with silky Belgian chocolate truffle ganache.',
+    image: '/assets/aistudio/cake_chocolate_truffle.png',
+    ingredients: 'Belgian 70% dark chocolate, Dutch-processed cocoa, fresh cream, French butter.',
     servings: '8 - 10 Servings',
-    tags: ['Best Seller', 'Artisanal Berries']
+    tags: ['Chocolate', 'Best Seller']
   },
   {
-    id: 'gold-leaf-ganache',
-    name: 'Gold Leaf Ganache',
-    price: 85,
-    description: 'Valrhona dark chocolate fudge layers wrapped in 24k edible gold leaf accents.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA4a4tBcFBG0WWJ5qV5t3p7yFADXyhseAXygj8Ll0fZOh4QVS31Z7HzsDHBDhcj-gUYYJ3JSO-CFdND4NM5N_Fw6LtEtiJ7EB_9D3nldgWK6HTwJM8tbD4Gr_cByx23ed9gG7NCk_R3mEI4SRI6m-q1Jpq388ETrAF4eOX1PZS_sAktOEyWjL9GekiTQPdAjoH7tDdexom1xfSTtTOvMEPa0Tq2XlHkc27vH1gsnJa4QDkCmYLXxXVL',
-    ingredients: 'Valrhona 70% Guanaja chocolate, French Normandy butter, 24k edible Florentine gold flakes, dark truffle cream.',
-    servings: '10 - 12 Servings',
-    tags: ['Gala Favorite', '24k Gold']
-  },
-  {
-    id: 'matcha-dream',
-    name: 'Matcha Dream',
-    price: 72,
-    description: 'Ceremonial grade Uji matcha sponge with white chocolate mousse filling.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDyhqtgmcZ5Oth_k-L1yO2pe8oOZMUszxk9nOypmEF5AdJp-mZ3-z8NUiEDNTvf6qLpSoVH0gmALV5JelyigqnW5TRKXmHGsM94yzkTTJovO8xccqGWtoY7la-ePZXGNt4ag4wUNDAcFhqvQxxndN-W722JIrFaY-QzEQ1PKVruwCvsD6gRASbfcv8-mKPXe-XbV93KD1OTp0eOydjjQCbqZgPm1pdkMqRMOr2zZTHdWLX8PkgRJB6_',
-    ingredients: 'First-harvest Kyoto Uji matcha, Belgian Opalys 33% white chocolate, light chiffon sponge, piped whipped ganache.',
+    id: 'strawberry-dream',
+    name: 'Strawberry Dream',
+    price: 999,
+    rating: 4.9,
+    reviewsCount: 98,
+    category: 'Birthday',
+    description: 'Light vanilla sponge crowned with fresh farm strawberries, berries, and floral buttercream.',
+    image: '/assets/aistudio/cake_strawberry_dream.png',
+    ingredients: 'Fresh strawberries, organic blueberries, whipped mascarpone cream, Madagascar vanilla.',
     servings: '8 - 10 Servings',
-    tags: ['Organic', 'Japanese Chiffon']
+    tags: ['Birthday', 'Fresh Fruit']
   },
   {
-    id: 'salted-caramel-symphony',
-    name: 'Salted Caramel Symphony',
-    price: 78,
-    description: 'Brown butter sponge layered with house-made fleur de sel caramel and roasted pecans.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBcSc_ePy1OnUpB1tpvBsQOoLLvUwMiB8vG272JCYQgHAEvETdLEz1aORn_40ZSRkSN-VyCmtj9I2YUi9ZA8Q0Fc1RS8dw9BJ11J6eyehshVZkHYrOWp_8SS8qXLCp9a7J2p86I4NMz1hoZ4Rv03SqVDjRDLe0piTP8cqBGB36wMn8jgKpVoyTiwQ74NFYAGrLfJDTpj_trds05d8D-ypaYWR_TtSVC-ujF7uxLloeuRdT3LYE5p35a',
-    ingredients: 'French brown butter (beurre noisette), Guérande fleur de sel, copper-kettle amber caramel, caramelized Georgia pecans.',
+    id: 'red-velvet',
+    name: 'Red Velvet',
+    price: 949,
+    rating: 4.8,
+    reviewsCount: 76,
+    category: 'Red Velvet',
+    description: 'Classic crimson cocoa velvet layers finished with whipped cream cheese frosting rosettes.',
+    image: '/assets/aistudio/cake_red_velvet.png',
+    ingredients: 'Cultured cream cheese, Ecuadorian cocoa touch, buttermilk sponge, vanilla bean frosting.',
+    servings: '8 - 10 Servings',
+    tags: ['Red Velvet', 'Signature']
+  },
+  {
+    id: 'butterscotch-bliss',
+    name: 'Butterscotch Bliss',
+    price: 899,
+    rating: 4.7,
+    reviewsCount: 64,
+    category: 'Birthday',
+    description: 'Warm brown-butter sponge drizzled with golden caramel butterscotch sauce and crunchy praline.',
+    image: '/assets/aistudio/cake_butterscotch_bliss.png',
+    ingredients: 'Caramelized cashew praline, house-made butterscotch drizzle, brown sugar sponge, whipped cream.',
+    servings: '8 - 10 Servings',
+    tags: ['Birthday', 'Caramel Praline']
+  },
+  {
+    id: 'black-forest',
+    name: 'Black Forest',
+    price: 949,
+    rating: 4.8,
+    reviewsCount: 92,
+    category: 'Chocolate',
+    description: 'Traditional German chocolate sponge layered with Chantilly cream, dark chocolate curls, and cherries.',
+    image: '/assets/aistudio/cake_black_forest.png',
+    ingredients: 'Morello cherries, dark chocolate shavings, Chantilly whipped cream, rich cocoa sponge.',
+    servings: '8 - 10 Servings',
+    tags: ['Chocolate', 'Classic']
+  },
+  {
+    id: 'vanilla-fresh-cream',
+    name: 'Vanilla Fresh Cream',
+    price: 799,
+    rating: 4.6,
+    reviewsCount: 56,
+    category: 'Vanilla',
+    description: 'Feather-light Madagascar vanilla sponge frosted in fresh dairy cream with hand-piped pastel roses.',
+    image: '/assets/aistudio/cake_vanilla_fresh_cream.png',
+    ingredients: 'Madagascar Bourbon vanilla pods, pure dairy whipping cream, pastel buttercream florals.',
+    servings: '8 - 10 Servings',
+    tags: ['Vanilla', 'Floral']
+  },
+  {
+    id: 'kitkat-cake',
+    name: 'KitKat Cake',
+    price: 1099,
+    rating: 4.0,
+    reviewsCount: 121,
+    category: 'Chocolate',
+    description: 'Indulgent chocolate layer cake with glossy ganache drips and crispy wafer chocolate swirls.',
+    image: '/assets/aistudio/cake_kitkat.png',
+    ingredients: 'Crispy chocolate wafer fingers, milk & dark chocolate ganache, fudge sponge.',
     servings: '10 - 12 Servings',
-    tags: ['Chef Signature', 'Fleur De Sel']
+    tags: ['Chocolate', 'Birthday']
+  },
+  {
+    id: 'designer-cake',
+    name: 'Designer Cake',
+    price: 1299,
+    rating: 4.9,
+    reviewsCount: 87,
+    category: 'Custom',
+    description: 'Bespoke couture celebration cake adorned with cascading hand-sculpted buttercream roses and botanicals.',
+    image: '/assets/aistudio/cake_designer.png',
+    ingredients: 'Swiss meringue buttercream, artisanal sponge of choice, hand-piped botanical florals.',
+    servings: '10 - 14 Servings',
+    tags: ['Custom', 'Designer']
   }
 ];
 
-export const INITIAL_CART: CartItem[] = [
-  {
-    id: 'cart-1',
-    cakeId: 'velvet-berry-bliss',
-    name: 'Velvet Berry Bliss',
-    price: 68,
-    quantity: 1,
-    image: SIGNATURE_CAKES[0].image,
-    details: 'Standard 8-10 servings with fresh berry garnish'
-  },
-  {
-    id: 'cart-2',
-    cakeId: 'gold-leaf-ganache',
-    name: 'Gold Leaf Ganache',
-    price: 85,
-    quantity: 1,
-    image: SIGNATURE_CAKES[1].image,
-    details: 'Includes personalized gold chocolate plaque'
-  },
-  {
-    id: 'cart-3',
-    cakeId: 'salted-caramel-symphony',
-    name: 'Salted Caramel Symphony',
-    price: 78,
-    quantity: 1,
-    image: SIGNATURE_CAKES[3].image,
-    details: 'Extra fleur de sel caramel drizzle'
-  }
-];
+export const INITIAL_CART: CartItem[] = [];
 
 export const REVIEWS: Review[] = [
   {

@@ -2,6 +2,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Order, LowStockItem, OrderStatus, ScreenType } from '../types';
 import { INITIAL_ORDERS, INITIAL_LOW_STOCK } from '../data/initialData';
 import { supabase } from '../supabaseClient';
+import {
+  fetchOrders,
+  updateOrderStatusInDb,
+  fetchInventoryItems,
+  updateInventoryItemInDb,
+} from '../services/supabaseData';
 
 interface AdminDashboardProps {
   onNavigate: (screen: ScreenType) => void;
@@ -14,18 +20,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenNewCustomOrder,
   onLogout,
 }) => {
-  // Protect private pages with supabase.auth.getSession() — if no session, redirect to /login
-  useEffect(() => {
-    const verifySession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        window.history.replaceState(null, '', '/login');
-        onNavigate('signin');
-      }
-    };
-    verifySession();
-  }, [onNavigate]);
-
   const [activeTab, setActiveTab] = useState<'Dashboard' | 'Orders' | 'Products' | 'Customers' | 'Analytics' | 'Settings'>('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All Statuses');
@@ -41,6 +35,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [activeDateFilter, setActiveDateFilter] = useState<'Today' | 'This Week' | 'This Month'>('Today');
 
+  // Protect private pages with supabase.auth.getSession() and load Supabase data
+  useEffect(() => {
+    const verifySessionAndLoadData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.history.replaceState(null, '', '/login');
+        onNavigate('signin');
+        return;
+      }
+
+      const { data: dbOrders } = await fetchOrders();
+      if (dbOrders && dbOrders.length > 0) {
+        setOrders(dbOrders);
+      }
+
+      const { data: dbInventory } = await fetchInventoryItems();
+      if (dbInventory && dbInventory.length > 0) {
+        setStockItems(dbInventory);
+      }
+    };
+    verifySessionAndLoadData();
+  }, [onNavigate]);
+
   // Filtered orders
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -54,35 +71,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [orders, statusFilter, searchQuery]);
 
-  const handleRestock = (id: string) => {
+  const handleRestock = async (id: string) => {
+    let targetRestocked = false;
+    let targetRemaining = '';
+
     setStockItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const isRestocked = !item.isRestocked;
+          targetRestocked = !item.isRestocked;
+          targetRemaining = targetRestocked ? 'Restocked (Healthy stock)' : item.remaining;
           return {
             ...item,
-            isRestocked,
-            remaining: isRestocked ? 'Restocked (Healthy stock)' : item.remaining,
+            isRestocked: targetRestocked,
+            remaining: targetRemaining,
           };
         }
         return item;
       })
     );
+
+    await updateInventoryItemInDb(id, {
+      isRestocked: targetRestocked,
+      remaining: targetRemaining,
+    });
   };
 
-  const handleCycleStatus = (orderId: string) => {
+  const handleCycleStatus = async (orderId: string) => {
+    let updatedStatus: OrderStatus = 'Pending';
+
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.id === orderId) {
-          let nextStatus: OrderStatus = 'Pending';
-          if (ord.status === 'Pending') nextStatus = 'Baking';
-          else if (ord.status === 'Baking') nextStatus = 'Delivered';
-          else nextStatus = 'Pending';
-          return { ...ord, status: nextStatus };
+          if (ord.status === 'Pending') updatedStatus = 'Baking';
+          else if (ord.status === 'Baking') updatedStatus = 'Delivered';
+          else updatedStatus = 'Pending';
+          return { ...ord, status: updatedStatus };
         }
         return ord;
       })
     );
+
+    await updateOrderStatusInDb(orderId, updatedStatus);
   };
 
   return (

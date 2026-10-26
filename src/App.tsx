@@ -7,6 +7,13 @@ import React, { useState, useEffect } from 'react';
 import { ScreenType, CakeProduct, CartItem } from './types';
 import { INITIAL_CART } from './data/initialData';
 import { supabase } from './supabaseClient';
+import {
+  fetchCartItems,
+  addCartItemToDb,
+  updateCartItemQuantityInDb,
+  deleteCartItemFromDb,
+  clearUserCartInDb,
+} from './services/supabaseData';
 import { Navbar } from './components/Navbar';
 import { Storefront } from './components/Storefront';
 import { SignIn } from './components/SignIn';
@@ -16,9 +23,26 @@ import { CartDrawer } from './components/CartDrawer';
 import { CakeConfiguratorModal } from './components/CakeConfiguratorModal';
 import { QuickViewModal } from './components/QuickViewModal';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
+import { UpdatePassword } from './components/UpdatePassword';
+import { UserProfile } from './components/UserProfile';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<ScreenType>('storefront');
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      if (
+        path === '/update-password' ||
+        path === '/reset-password' ||
+        window.location.hash.includes('type=recovery')
+      ) {
+        return 'update-password';
+      }
+      if (path === '/profile') return 'profile';
+      if (path === '/login' || path === '/signin') return 'signin';
+      if (path === '/signup') return 'signup';
+    }
+    return 'storefront';
+  });
   const [cartItems, setCartItems] = useState<CartItem[]>(INITIAL_CART);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [quickViewCake, setQuickViewCake] = useState<CakeProduct | null>(null);
@@ -37,10 +61,14 @@ export default function App() {
   useEffect(() => {
     // Check if URL indicates a password reset recovery flow
     if (
-      window.location.hash.includes('type=recovery') ||
-      window.location.pathname === '/reset-password'
+      window.location.pathname === '/update-password' ||
+      window.location.pathname === '/reset-password' ||
+      window.location.hash.includes('type=recovery')
     ) {
-      setIsResetPasswordOpen(true);
+      if (window.location.pathname !== '/update-password') {
+        window.history.replaceState(null, '', `/update-password${window.location.hash}`);
+      }
+      setCurrentScreen('update-password');
     }
 
     const verifyInitialSessionAndRoute = async () => {
@@ -71,24 +99,48 @@ export default function App() {
           initials: (name.slice(0, 2) || 'CZ').toUpperCase(),
           email: userEmail,
         });
+
+        const { data: dbCart } = await fetchCartItems();
+        if (dbCart && dbCart.length > 0) {
+          setCartItems(dbCart);
+        }
       }
 
       // Check current URL path to protect private pages
       const path = window.location.pathname;
-      const isPrivate =
+      if (
+        path === '/update-password' ||
+        path === '/reset-password' ||
+        window.location.hash.includes('type=recovery')
+      ) {
+        setCurrentScreen('update-password');
+        return;
+      }
+
+      const isAdminRoute =
         path === '/dashboard' ||
         path.startsWith('/dashboard/') ||
         path === '/admin' ||
         path.startsWith('/admin/');
+      const isProfileRoute = path === '/profile' || path.startsWith('/profile/');
 
-      if (isPrivate) {
-        // Protect private pages with supabase.auth.getSession() — if no session, redirect to /login
+      if (isAdminRoute || isProfileRoute) {
         if (!session) {
           window.history.replaceState(null, '', '/login');
           setCurrentScreen('signin');
-          showToast('Please sign in to access private pages.');
+          showToast('Please sign in to access your profile.');
         } else {
-          setCurrentScreen('dashboard');
+          const userEmail = session.user.email || '';
+          const isAdmin =
+            userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+          if (isAdminRoute && isAdmin) {
+            setCurrentScreen('dashboard');
+          } else {
+            if (isAdminRoute) {
+              window.history.replaceState(null, '', '/profile');
+            }
+            setCurrentScreen('profile');
+          }
         }
       } else if (path === '/login' || path === '/signin') {
         const params = new URLSearchParams(window.location.search);
@@ -119,10 +171,17 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        setIsResetPasswordOpen(true);
+        if (window.location.pathname !== '/update-password') {
+          window.history.replaceState(null, '', '/update-password');
+        }
+        setCurrentScreen('update-password');
+        return;
       }
 
       if (session?.user) {
+        if (typeof window !== 'undefined' && sessionStorage.getItem('cakezone_signup_in_progress') === 'true') {
+          return;
+        }
         if (window.opener && window.name === 'CakeZoneGoogleAuth') {
           window.opener.postMessage(
             {
@@ -148,11 +207,21 @@ export default function App() {
           initials: (name.slice(0, 2) || 'CZ').toUpperCase(),
           email: userEmail,
         });
-        if (event === 'SIGNED_IN') {
-          setCurrentScreen((prev) => (prev === 'signin' || prev === 'signup' ? 'storefront' : prev));
+        fetchCartItems().then(({ data: dbCart }) => {
+          if (dbCart) {
+            setCartItems(dbCart);
+          }
+        });
+        if (
+          event === 'SIGNED_IN' &&
+          window.location.pathname !== '/update-password' &&
+          !window.location.hash.includes('type=recovery')
+        ) {
+          setCurrentScreen((prev) => (prev === 'signin' ? 'storefront' : prev));
         }
       } else {
         setCurrentUser(null);
+        setCartItems([]);
       }
     });
 
@@ -169,21 +238,31 @@ export default function App() {
 
     const handlePopState = async () => {
       const path = window.location.pathname;
-      const isPrivate =
+      const isAdminRoute =
         path === '/dashboard' ||
         path.startsWith('/dashboard/') ||
         path === '/admin' ||
         path.startsWith('/admin/');
+      const isProfileRoute = path === '/profile' || path.startsWith('/profile/');
 
-      if (isPrivate) {
+      if (isAdminRoute || isProfileRoute) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
           window.history.replaceState(null, '', '/login');
           setCurrentScreen('signin');
-          showToast('Please sign in to access private pages.');
+          showToast('Please sign in to access your profile.');
           return;
         }
-        setCurrentScreen('dashboard');
+        const userEmail = session.user.email || '';
+        const isAdmin =
+          userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+        if (isAdminRoute && isAdmin) {
+          setCurrentScreen('dashboard');
+        } else {
+          setCurrentScreen('profile');
+        }
+      } else if (path === '/update-password' || path === '/reset-password') {
+        setCurrentScreen('update-password');
       } else if (path === '/login' || path === '/signin') {
         setCurrentScreen('signin');
       } else if (path === '/signup') {
@@ -217,12 +296,22 @@ export default function App() {
 
   const navigateTo = async (screen: ScreenType) => {
     // Protect private pages with supabase.auth.getSession() — if no session, redirect to /login
-    if (screen === 'dashboard') {
+    if (screen === 'dashboard' || screen === 'profile') {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        showToast('Please sign in to access private pages.');
+        showToast('Please sign in to access your profile.');
         window.history.pushState(null, '', '/login');
         setCurrentScreen('signin');
+        return;
+      }
+      const userEmail = session.user.email || '';
+      const isAdmin =
+        userEmail.toLowerCase().includes('admin') || userEmail.toLowerCase().includes('baker');
+      if (screen === 'dashboard' && !isAdmin) {
+        setCurrentScreen('profile');
+        if (window.location.pathname !== '/profile') {
+          window.history.pushState(null, '', '/profile');
+        }
         return;
       }
     }
@@ -235,6 +324,10 @@ export default function App() {
         ? '/login'
         : screen === 'signup'
         ? '/signup'
+        : screen === 'update-password'
+        ? '/update-password'
+        : screen === 'profile'
+        ? '/profile'
         : '/dashboard';
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path);
@@ -248,6 +341,7 @@ export default function App() {
       // Ignore network errors on signout
     }
     setCurrentUser(null);
+    setCartItems([]);
     showToast('Signed out of CakeZone.');
     navigateTo('storefront');
   };
@@ -256,7 +350,8 @@ export default function App() {
     setQuickViewCake(cake);
   };
 
-  const handleAddToCart = (cake: CakeProduct, quantity = 1) => {
+  const handleAddToCart = async (cake: CakeProduct, quantity = 1) => {
+    const tempId = `cart-${Date.now()}`;
     setCartItems((prev) => {
       const existing = prev.find((i) => i.cakeId === cake.id);
       if (existing) {
@@ -267,7 +362,7 @@ export default function App() {
       return [
         ...prev,
         {
-          id: `cart-${Date.now()}`,
+          id: tempId,
           cakeId: cake.id,
           name: cake.name,
           price: cake.price,
@@ -278,6 +373,24 @@ export default function App() {
       ];
     });
     showToast(`Added ${quantity}x "${cake.name}" to your artisanal bag.`);
+
+    const { data: savedItem } = await addCartItemToDb({
+      cakeId: cake.id,
+      name: cake.name,
+      price: cake.price,
+      quantity,
+      image: cake.image,
+      details: cake.servings,
+    });
+    if (savedItem) {
+      setCartItems((prev) =>
+        prev.map((item) =>
+          item.id === tempId || (savedItem.cakeId && item.cakeId === savedItem.cakeId)
+            ? savedItem
+            : item
+        )
+      );
+    }
   };
 
   const handleOrderNow = (cake: CakeProduct) => {
@@ -285,16 +398,17 @@ export default function App() {
     setIsCartOpen(true);
   };
 
-  const handleAddCustomCake = (customCake: {
+  const handleAddCustomCake = async (customCake: {
     name: string;
     price: number;
     image: string;
     details: string;
   }) => {
+    const tempId = `cart-custom-${Date.now()}`;
     setCartItems((prev) => [
       ...prev,
       {
-        id: `cart-custom-${Date.now()}`,
+        id: tempId,
         name: customCake.name,
         price: customCake.price,
         quantity: 1,
@@ -304,29 +418,45 @@ export default function App() {
     ]);
     showToast(`Custom cake creation added to order bag.`);
     setIsCartOpen(true);
+
+    const { data: savedItem } = await addCartItemToDb({
+      name: customCake.name,
+      price: customCake.price,
+      quantity: 1,
+      image: customCake.image,
+      details: customCake.details,
+    });
+    if (savedItem) {
+      setCartItems((prev) => prev.map((item) => (item.id === tempId ? savedItem : item)));
+    }
   };
 
-  const handleUpdateQuantity = (id: string, delta: number) => {
+  const handleUpdateQuantity = async (id: string, delta: number) => {
+    let updatedQty = 0;
     setCartItems((prev) =>
       prev
         .map((i) => {
           if (i.id === id) {
-            const newQty = i.quantity + delta;
-            return newQty > 0 ? { ...i, quantity: newQty } : null;
+            updatedQty = i.quantity + delta;
+            return updatedQty > 0 ? { ...i, quantity: updatedQty } : null;
           }
           return i;
         })
         .filter(Boolean) as CartItem[]
     );
+
+    await updateCartItemQuantityInDb(id, updatedQty);
   };
 
-  const handleRemoveItem = (id: string) => {
+  const handleRemoveItem = async (id: string) => {
     setCartItems((prev) => prev.filter((i) => i.id !== id));
     showToast('Item removed from bag.');
+    await deleteCartItemFromDb(id);
   };
 
-  const handleClearCart = () => {
+  const handleClearCart = async () => {
     setCartItems([]);
+    await clearUserCartInDb();
   };
 
   const totalCartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -335,12 +465,14 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container relative">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 sm:top-24 left-1/2 transform -translate-x-1/2 z-[100] bg-primary text-on-primary px-6 py-3 rounded-full shadow-2xl text-xs sm:text-sm font-semibold flex items-center gap-2.5 animate-bounce">
-          <span className="material-symbols-outlined text-base">check_circle</span>
-          <span className="tracking-wide">{toastMessage}</span>
+        <div className="fixed top-18 sm:top-24 left-1/2 transform -translate-x-1/2 z-[100] w-[calc(100%-2rem)] sm:w-auto max-w-md bg-primary text-on-primary px-4 sm:px-6 py-3 rounded-2xl sm:rounded-full shadow-2xl text-xs sm:text-sm font-semibold flex items-center justify-between sm:justify-center gap-2.5 animate-bounce">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="material-symbols-outlined text-base shrink-0">check_circle</span>
+            <span className="tracking-wide truncate sm:whitespace-normal">{toastMessage}</span>
+          </div>
           <button
             onClick={() => setToastMessage(null)}
-            className="ml-2 hover:opacity-80 p-0.5 rounded-full hover:bg-black/10 transition-colors text-xs"
+            className="ml-1 hover:opacity-80 p-1 rounded-full hover:bg-black/10 transition-colors text-xs shrink-0"
             aria-label="Close notification"
           >
             ✕
@@ -436,7 +568,35 @@ export default function App() {
         />
       )}
 
-      {currentScreen === 'dashboard' && (
+      {currentScreen === 'update-password' && (
+        <UpdatePassword
+          onNavigate={(screen) => navigateTo(screen)}
+          onPasswordUpdated={() => {
+            setCurrentUser(null);
+            setAuthSuccessMessage('Your password has been updated successfully. Please sign in with your new password.');
+            showToast('Password updated! Please sign in.');
+            window.history.replaceState(null, '', '/login');
+            setCurrentScreen('signin');
+          }}
+        />
+      )}
+
+      {currentScreen === 'profile' && (
+        <UserProfile
+          user={currentUser}
+          cartItems={cartItems}
+          onNavigate={(screen) => navigateTo(screen)}
+          onUpdateUser={(updated) => {
+            setCurrentUser(updated);
+            showToast('Profile updated!');
+          }}
+          onOpenCart={() => setIsCartOpen(true)}
+          onOpenConfigurator={() => setIsConfiguratorOpen(true)}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {currentScreen === 'dashboard' && currentUser?.role === 'Admin' && (
         <AdminDashboard
           onNavigate={(screen) => navigateTo(screen)}
           onOpenNewCustomOrder={() => {
@@ -458,6 +618,7 @@ export default function App() {
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveItem}
         onClearCart={handleClearCart}
+        customerName={currentUser?.name}
       />
 
       {/* Bespoke Cake Configurator Modal */}

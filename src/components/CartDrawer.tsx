@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem } from '../types';
+import { createOrderInDb } from '../services/supabaseData';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface CartDrawerProps {
   onUpdateQuantity: (id: string, delta: number) => void;
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
+  customerName?: string;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -17,29 +19,42 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
+  customerName,
 }) => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutComplete, setCheckoutComplete] = useState(false);
+  const [confirmedOrderCode, setConfirmedOrderCode] = useState('#CZ-8493');
 
   if (!isOpen) return null;
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const packagingFee = 0; // Complimentary luxury packaging
   const deliveryFee = 0; // Free luxury delivery
-  const tax = subtotal * 0.08875;
+  const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax + packagingFee + deliveryFee;
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     setIsCheckingOut(true);
-    setTimeout(() => {
+    try {
+      const { orderCode } = await createOrderInDb({
+        customer: customerName || 'CakeZone Member',
+        items,
+        specialInstructions,
+        amount: total,
+      });
+      if (orderCode) {
+        setConfirmedOrderCode(orderCode);
+      }
+    } finally {
       setIsCheckingOut(false);
       setCheckoutComplete(true);
-    }, 1000);
+    }
   };
 
   const handleFinish = () => {
     setCheckoutComplete(false);
+    setSpecialInstructions('');
     onClearCart();
     onClose();
   };
@@ -52,26 +67,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         onClick={onClose}
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-surface border-l border-outline-variant shadow-2xl flex flex-col justify-between">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
+        <div className="w-screen max-w-md bg-surface sm:border-l border-outline-variant shadow-2xl flex flex-col justify-between">
           {/* Drawer Header */}
-          <div className="px-6 py-5 bg-surface-container border-b border-outline-variant/40 flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-4 sm:py-5 bg-surface-container border-b border-outline-variant/40 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">shopping_bag</span>
-              <h2 className="text-lg font-bold text-on-surface font-headline">
+              <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline">
                 Artisanal Bag ({items.reduce((s, i) => s + i.quantity, 0)})
               </h2>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer"
+              aria-label="Close shopping bag"
+              className="w-9 h-9 inline-flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">close</span>
             </button>
           </div>
 
           {/* Drawer Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
             {checkoutComplete ? (
               <div className="py-12 text-center space-y-4">
                 <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
@@ -81,13 +97,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   Order Confirmed!
                 </h3>
                 <p className="text-sm text-on-surface-variant max-w-xs mx-auto">
-                  Your artisanal order #CZ-8493 has been scheduled in the patisserie production queue.
+                  Your artisanal order {confirmedOrderCode} has been scheduled in the patisserie production queue.
                 </p>
                 <div className="p-4 rounded-xl bg-surface-container text-xs text-left space-y-1.5 text-on-surface-variant">
                   <p className="font-bold text-on-surface">Order Summary:</p>
                   <p>Estimated Delivery: Tomorrow by 2:00 PM</p>
                   <p>Handcrafted by: Master Baker CZ</p>
-                  <p className="font-bold text-primary pt-1">Total Paid: ${total.toFixed(2)}</p>
+                  <p className="font-bold text-primary pt-1">Total Paid: ₹{total.toLocaleString('en-IN')}</p>
                 </div>
                 <button
                   onClick={handleFinish}
@@ -163,7 +179,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             </button>
                           </div>
                           <span className="font-bold text-sm text-primary tabular-nums">
-                            ${(item.price * item.quantity).toFixed(2)}
+                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                           </span>
                         </div>
                       </div>
@@ -195,7 +211,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span className="font-semibold text-on-surface tabular-nums">
-                    ${subtotal.toFixed(2)}
+                    ₹{subtotal.toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -207,14 +223,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span className="font-semibold text-emerald-600">Free</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Estimated Tax (NYC 8.875%)</span>
+                  <span>Estimated Tax (GST 5%)</span>
                   <span className="font-semibold text-on-surface tabular-nums">
-                    ${tax.toFixed(2)}
+                    ₹{tax.toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between text-base font-black text-on-surface pt-2 border-t border-outline-variant/30">
                   <span>Total</span>
-                  <span className="text-primary tabular-nums">${total.toFixed(2)}</span>
+                  <span className="text-primary tabular-nums">₹{total.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 

@@ -9,6 +9,9 @@ interface SignInProps {
   successMessage?: string | null;
 }
 
+const SIGNUP_SUCCESS_MESSAGE =
+  'Your account has been created. Please check your email and verify your address before logging in.';
+
 export const SignIn: React.FC<SignInProps> = ({
   onNavigate,
   onLoginSuccess,
@@ -19,7 +22,11 @@ export const SignIn: React.FC<SignInProps> = ({
     if (initialEmail) return initialEmail;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return params.get('email') || '';
+      const queryEmail = params.get('email');
+      if (queryEmail) return queryEmail;
+      if (window.history.state?.email) return window.history.state.email;
+      const storedEmail = sessionStorage.getItem('cakezone_signup_email');
+      if (storedEmail) return storedEmail;
     }
     return '';
   });
@@ -28,8 +35,12 @@ export const SignIn: React.FC<SignInProps> = ({
     if (successMessage) return successMessage;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('signup') === 'success') {
-        return 'Your account has been created. Please check your email and verify your address before logging in.';
+      if (
+        params.get('signup') === 'success' ||
+        window.history.state?.signupSuccess ||
+        sessionStorage.getItem('cakezone_signup_success') === 'true'
+      ) {
+        return SIGNUP_SUCCESS_MESSAGE;
       }
     }
     return null;
@@ -46,25 +57,31 @@ export const SignIn: React.FC<SignInProps> = ({
   useEffect(() => {
     if (initialEmail) {
       setEmail(initialEmail);
-    } else if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const urlEmail = params.get('email');
-      if (urlEmail) {
-        setEmail(urlEmail);
-      }
     }
-  }, [initialEmail]);
-
-  useEffect(() => {
     if (successMessage) {
       setBannerMessage(successMessage);
-    } else if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('signup') === 'success') {
-        setBannerMessage('Your account has been created. Please check your email and verify your address before logging in.');
-      }
     }
-  }, [successMessage]);
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlEmail = params.get('email') || window.history.state?.email || sessionStorage.getItem('cakezone_signup_email');
+      if (urlEmail && !initialEmail) {
+        setEmail(urlEmail);
+      }
+
+      const isSignupSuccess =
+        params.get('signup') === 'success' ||
+        Boolean(window.history.state?.signupSuccess) ||
+        sessionStorage.getItem('cakezone_signup_success') === 'true';
+
+      if (isSignupSuccess && !successMessage) {
+        setBannerMessage(SIGNUP_SUCCESS_MESSAGE);
+      }
+
+      sessionStorage.removeItem('cakezone_signup_email');
+      sessionStorage.removeItem('cakezone_signup_success');
+    }
+  }, [initialEmail, successMessage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,25 +138,29 @@ export const SignIn: React.FC<SignInProps> = ({
   const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
-    if (!resetEmail.trim()) {
+    const email = resetEmail.trim();
+    if (!email) {
       setResetError('Please enter your email address.');
       return;
     }
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://cakezone-e7kn0thcg-ahteshaam-faruquis-projects.vercel.app/update-password',
       });
       if (error) {
-        if (error.message.toLowerCase().includes('rate limit')) {
+        if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('60 seconds')) {
           setResetError(
-            'Email rate limit exceeded (Supabase limit is 3-4 emails/hr). Please wait a few minutes before trying again.'
+            'Please wait at least 60 seconds before requesting another password recovery email.'
           );
         } else {
           setResetError(error.message);
         }
       } else {
         setResetSent(true);
+        setBannerMessage(
+          `A secure password recovery email has been sent to ${email} via Brevo. Please check your inbox (and Spam/Promotions folder) and click the reset link.`
+        );
       }
     } catch (err: any) {
       setResetError(err.message || 'Failed to send password reset email.');
@@ -228,6 +249,7 @@ export const SignIn: React.FC<SignInProps> = ({
                   type="button"
                   onClick={() => {
                     setResetEmail(email);
+                    setResetError('');
                     setShowForgotModal(true);
                     setResetSent(false);
                   }}
@@ -339,10 +361,16 @@ export const SignIn: React.FC<SignInProps> = ({
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+        >
           <div className="bg-surface-container-lowest max-w-sm w-full p-6 rounded-2xl shadow-2xl border border-outline-variant space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-bold text-on-surface">Reset Password</h3>
+              <h3 className="text-lg font-bold text-on-surface">
+                {resetSent ? 'Recovery Email Sent' : 'Reset Password'}
+              </h3>
               <button
                 onClick={() => setShowForgotModal(false)}
                 className="text-on-surface-variant hover:text-on-surface cursor-pointer"
@@ -351,24 +379,28 @@ export const SignIn: React.FC<SignInProps> = ({
               </button>
             </div>
             {resetSent ? (
-              <div className="p-4 bg-primary/10 border border-primary/30 text-on-surface rounded-xl text-xs space-y-2 text-center">
-                <span className="material-symbols-outlined text-primary text-2xl">mail</span>
-                <p className="font-bold text-primary">Password Reset Link Sent!</p>
-                <p className="text-on-surface-variant">
-                  We sent a recovery link to <span className="font-semibold text-on-surface">{resetEmail}</span>.
-                  Click the link in your email to create a new password.
+              <div className="p-4 bg-[#ebf9f2] border border-[#d2eee0] text-[#3b8766] rounded-xl text-xs space-y-2.5 text-center">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#3b8766]/15 text-[#3b8766] mx-auto">
+                  <span className="material-symbols-outlined text-xl">mark_email_read</span>
+                </div>
+                <p className="font-bold text-sm text-[#2c6b4f]">
+                  Secure Password Recovery Email Sent!
+                </p>
+                <p className="text-[#3b8766] leading-relaxed">
+                  A secure password recovery email has been sent to your inbox (<span className="font-semibold text-[#2c6b4f]">{resetEmail}</span>) via Brevo. Please check your inbox and click the reset link to set a new password.
                 </p>
                 <button
+                  type="button"
                   onClick={() => setShowForgotModal(false)}
-                  className="w-full mt-3 py-2 bg-primary text-on-primary text-xs font-bold rounded-lg cursor-pointer hover:bg-primary/90"
+                  className="mt-2 w-full py-2.5 bg-primary text-on-primary text-xs font-bold rounded-xl cursor-pointer hover:bg-primary/90 transition-all"
                 >
-                  Return to Sign In
+                  Got It, Return to Sign In
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSendResetEmail} className="space-y-3">
-                <p className="text-xs text-on-surface-variant">
-                  Enter your registered CakeZone email address and we will send a password reset link to recreate your password.
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  Enter your registered CakeZone email address to receive a secure password recovery link in your inbox via Brevo.
                 </p>
                 <input
                   type="email"

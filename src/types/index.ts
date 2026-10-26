@@ -1,9 +1,12 @@
-export type ScreenType = 'storefront' | 'signin' | 'signup' | 'dashboard';
+export type ScreenType = 'storefront' | 'signin' | 'signup' | 'dashboard' | 'profile' | 'update-password';
 
 export interface CakeProduct {
   id: string;
   name: string;
   price: number;
+  rating?: number;
+  reviewsCount?: number;
+  category?: string;
   description: string;
   image: string;
   ingredients: string;

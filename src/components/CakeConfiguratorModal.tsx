@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { HERO_CAKE_URL } from '../data/initialData';
+import { createCustomCakeInDb } from '../services/supabaseData';
 
 interface CakeConfiguratorModalProps {
   isOpen: boolean;
@@ -38,13 +39,25 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
     }
   };
 
-  // Pricing calculation
-  const baseTierPrice = tiers === 1 ? 95 : tiers === 2 ? 185 : tiers === 3 ? 320 : 480;
-  const accentPrice = accents.length * 25;
+  // Pricing calculation (INR)
+  const baseTierPrice = tiers === 1 ? 1499 : tiers === 2 ? 2799 : tiers === 3 ? 4499 : 6499;
+  const accentPrice = accents.length * 299;
   const totalPrice = baseTierPrice + accentPrice;
 
-  const handleSaveAndAdd = () => {
+  const handleSaveAndAdd = async () => {
     const details = `${tiers} Tiers · ${spongeFlavor} · ${filling} · ${accents.join(', ')} · "${inscription}"`;
+
+    await createCustomCakeInDb({
+      tiers,
+      sponge_flavor: spongeFlavor,
+      filling,
+      exterior_finish: finish,
+      accents,
+      inscription,
+      event_date: eventDate,
+      estimated_price: totalPrice,
+    });
+
     onAddCustomCake({
       name: `Bespoke ${tiers}-Tier Celebration Cake`,
       price: totalPrice,
@@ -55,26 +68,27 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-surface max-w-3xl w-full rounded-2xl shadow-2xl border border-outline-variant overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 bg-primary-container text-on-primary-container flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-primary-container text-on-primary-container flex items-center justify-between">
           <div>
-            <span className="text-[11px] font-bold tracking-widest uppercase opacity-80">
+            <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase opacity-80">
               Bespoke Patisserie Atelier
             </span>
-            <h2 className="text-xl font-bold font-headline">Design Your Custom Cake</h2>
+            <h2 className="text-lg sm:text-xl font-bold font-headline">Design Your Custom Cake</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-on-primary-container hover:bg-black/10 transition-colors cursor-pointer"
+            aria-label="Close configurator"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-full text-on-primary-container hover:bg-black/10 transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         {/* Configurator Form */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 flex-1">
           {/* Tiers Selection */}
           <div>
             <label className="block text-xs font-bold text-on-surface uppercase tracking-wider mb-2">
@@ -82,10 +96,10 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { count: 1, label: '1 Tier', guests: '12 - 16 guests', price: '$95' },
-                { count: 2, label: '2 Tiers', guests: '25 - 35 guests', price: '$185' },
-                { count: 3, label: '3 Tiers', guests: '50 - 75 guests', price: '$320' },
-                { count: 4, label: '4 Tiers', guests: '100+ guests', price: '$480' },
+                { count: 1, label: '1 Tier', guests: '12 - 16 guests', price: '₹1,499' },
+                { count: 2, label: '2 Tiers', guests: '25 - 35 guests', price: '₹2,799' },
+                { count: 3, label: '3 Tiers', guests: '50 - 75 guests', price: '₹4,499' },
+                { count: 4, label: '4 Tiers', guests: '100+ guests', price: '₹6,499' },
               ].map((t) => (
                 <button
                   key={t.count}
@@ -191,7 +205,7 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
           {/* Accents (Multiselect) */}
           <div>
             <label className="block text-xs font-bold text-on-surface uppercase tracking-wider mb-2">
-              5. Bespoke Accents (+$25 ea)
+              5. Bespoke Accents (+₹299 ea)
             </label>
             <div className="flex flex-wrap gap-2 text-xs">
               {[
@@ -250,23 +264,23 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
         </div>
 
         {/* Footer with Price and CTA */}
-        <div className="px-6 py-4 bg-surface-container border-t border-outline-variant flex items-center justify-between">
-          <div>
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-surface-container border-t border-outline-variant flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center justify-between sm:block">
             <span className="text-[11px] text-on-surface-variant font-medium">Estimated Total</span>
-            <div className="text-xl font-black text-primary font-headline tabular-nums">
-              ${totalPrice.toFixed(2)}
+            <div className="text-lg sm:text-xl font-black text-primary font-headline tabular-nums">
+              ₹{totalPrice.toLocaleString('en-IN')}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-outline text-xs font-bold text-on-surface hover:bg-surface-variant cursor-pointer"
+              className="px-4 py-2.5 sm:py-2 rounded-xl border border-outline text-xs font-bold text-on-surface hover:bg-surface-variant cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={handleSaveAndAdd}
-              className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-md hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
+              className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-md hover:bg-primary/90 transition-all cursor-pointer active:scale-95 text-center"
             >
               Add Bespoke Creation to Order
             </button>
