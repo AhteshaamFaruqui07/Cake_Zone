@@ -178,7 +178,7 @@ export const INITIAL_ORDERS: Order[] = [
     id: '#CZ-8488',
     customer: 'Olivia Wilde',
     cakeItem: 'Salted Caramel Macaron Tower',
-    date: 'Oct 24, 2023',
+    date: 'Oct 24, 2027',
     status: 'Delivered',
     amount: 210.00
   }

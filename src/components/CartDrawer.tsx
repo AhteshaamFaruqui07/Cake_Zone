@@ -11,6 +11,7 @@ interface CartDrawerProps {
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   customerName?: string;
+  customerEmail?: string;
 }
 
 const WHATSAPP_NUMBER_DISPLAY = '+91 9770566246';
@@ -24,6 +25,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onClearCart,
   customerName,
+  customerEmail,
 }) => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [contactNumber, setContactNumber] = useState('');
@@ -63,8 +65,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax + packagingFee + deliveryFee;
 
-  const digitsOnlyContact = contactNumber.replace(/\D/g, '');
-  const isContactValid = digitsOnlyContact.length >= 10;
+  const isContactValid = /^\d{10}$/.test(contactNumber);
 
   const buildWhatsAppMessage = (
     orderItems: CartItem[],
@@ -96,6 +97,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     if (customerName) {
       lines.push(`Customer Name: ${customerName}`);
     }
+    if (customerEmail) {
+      lines.push(`Customer Email: ${customerEmail}`);
+    }
     if (phone.trim()) {
       lines.push(`Contact Number: ${phone.trim()}`);
     }
@@ -120,7 +124,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
     if (!isContactValid) {
-      setContactError('Please enter a valid 10-digit mobile contact number.');
+      setContactError('Please enter a valid 10-digit mobile contact number (digits only, no special characters).');
       return;
     }
     setContactError('');
@@ -142,13 +146,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     try {
       const { orderCode } = await createOrderInDb({
-        customer: customerName
-          ? `${customerName} (${snapshotPhone})`
-          : `Guest (${snapshotPhone})`,
+        customer: customerName || 'Customer',
+        customerEmail: customerEmail || '',
+        customerPhone: snapshotPhone,
         items: snapshotItems,
-        specialInstructions: specialInstructions
-          ? `${specialInstructions} | Contact: ${snapshotPhone}`
-          : `Contact: ${snapshotPhone}`,
+        specialInstructions,
         amount: snapshotTotal,
       });
       const finalCode = orderCode || `#CZ-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -351,13 +353,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </label>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
                     required
                     value={contactNumber}
                     onChange={(e) => {
-                      setContactNumber(e.target.value);
+                      const sanitized = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setContactNumber(sanitized);
                       if (contactError) setContactError('');
                     }}
-                    placeholder="e.g. +91 98765 43210"
+                    placeholder="e.g. 9876543210"
                     className={`w-full px-3.5 py-2.5 text-sm font-medium bg-surface border rounded-xl text-on-surface focus:outline-none focus:ring-2 transition-all ${
                       contactError
                         ? 'border-error focus:ring-error/30'
@@ -373,7 +379,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </p>
                   ) : (
                     <p className="text-[11px] text-on-surface-variant">
-                      Required for delivery updates & WhatsApp order confirmation.
+                      Enter a 10-digit mobile number (numbers only, no special characters).
                     </p>
                   )}
                 </div>

@@ -9,6 +9,7 @@ import {
 } from '../data/initialData';
 
 interface StorefrontProps {
+  cakes?: CakeProduct[];
   onQuickView: (cake: CakeProduct) => void;
   onOrderNow: (cake: CakeProduct) => void;
   onOpenConfigurator: () => void;
@@ -19,6 +20,7 @@ interface StorefrontProps {
 }
 
 export const Storefront: React.FC<StorefrontProps> = ({
+  cakes,
   onQuickView,
   onOrderNow,
   onOpenConfigurator,
@@ -29,13 +31,62 @@ export const Storefront: React.FC<StorefrontProps> = ({
 }) => {
   const [localName, setLocalName] = useState(userName || '');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [activePolicyModal, setActivePolicyModal] = useState<'terms' | 'privacy' | null>(null);
+  const [typedWord, setTypedWord] = useState<string>('Perfection');
 
+  useEffect(() => {
+    const fullWord = 'Perfection';
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setTypedWord(fullWord);
+      return;
+    }
+
+    let currentIndex = 0;
+    let isDeleting = false;
+    let timerId: number;
+
+    setTypedWord('');
+
+    const step = () => {
+      if (!isDeleting) {
+        currentIndex += 1;
+        setTypedWord(fullWord.slice(0, currentIndex));
+        if (currentIndex >= fullWord.length) {
+          isDeleting = true;
+          timerId = window.setTimeout(step, 2200);
+        } else {
+          timerId = window.setTimeout(step, 175);
+        }
+      } else {
+        currentIndex -= 1;
+        setTypedWord(fullWord.slice(0, currentIndex));
+        if (currentIndex <= 0) {
+          isDeleting = false;
+          timerId = window.setTimeout(step, 700);
+        } else {
+          timerId = window.setTimeout(step, 115);
+        }
+      }
+    };
+
+    timerId = window.setTimeout(step, 500);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, []);
+
+  const catalogCakes = cakes && cakes.length > 0 ? cakes : SIGNATURE_CAKES;
   const categories = ['All', 'Birthday', 'Chocolate', 'Vanilla', 'Red Velvet', 'Custom'];
 
   const filteredCakes =
     selectedCategory === 'All'
-      ? SIGNATURE_CAKES
-      : SIGNATURE_CAKES.filter(
+      ? catalogCakes
+      : catalogCakes.filter(
           (cake) =>
             cake.category === selectedCategory || cake.tags.includes(selectedCategory)
         );
@@ -101,13 +152,24 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 <path d="M3 15.5c1.5 0 2-1 3.5-1s2 1 3.5 1 2-1 3.5-1 2 1 3.5 1 2-1 3.5-1" />
               </svg>
               <span className="font-medium text-[#5E439C]">Welcome,</span>
-              <span className="text-[#140D26] font-extrabold select-none">{displayName}</span>
+              <span className="font-leckerli text-lg sm:text-xl md:text-[22px] text-[#8B38C7] font-normal select-none leading-none">
+                {displayName}
+              </span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl md:text-[62px] font-black font-headline tracking-[-0.03em] text-[#140D26] leading-[1.1] sm:leading-[1.08]">
+            <h1
+              aria-label="Crafted with Love, Baked to Perfection"
+              className="text-3xl sm:text-5xl md:text-[62px] font-black font-headline tracking-[-0.03em] text-[#140D26] leading-[1.1] sm:leading-[1.08]"
+            >
               Crafted with Love,
               <br />
-              Baked to <span className="text-[#9B4DCA]">Perfection</span>
+              Baked to{' '}
+              <span
+                aria-hidden="true"
+                className="inline-flex items-baseline text-[#9B4DCA] whitespace-nowrap transition-all duration-150 ease-out after:content-[''] after:inline-block after:w-[2px] sm:after:w-[3px] after:h-[0.82em] after:bg-[#9B4DCA] after:ml-1.5 after:rounded-full after:translate-y-[0.06em] after:animate-[typewriter-blink_1.15s_ease-in-out_infinite] motion-reduce:after:animate-none"
+              >
+                {typedWord}
+              </span>
             </h1>
 
             <p className="text-sm sm:text-[15px] md:text-base text-[#2D3A4A] md:text-[#3E4C5E] leading-[1.65] max-w-[480px] font-normal">
@@ -123,11 +185,31 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     document.getElementById('collections')?.scrollIntoView({ behavior: 'smooth' });
                   }, 'browse collections');
                 }}
-                className="group inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-full bg-[#51328F] text-white text-sm font-bold shadow-[0_10px_24px_-6px_rgba(81,50,143,0.55)] hover:bg-[#432878] transition-all transform active:scale-95 cursor-pointer w-full sm:w-auto"
+                className="explore-waves-btn group inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-full bg-[#6841B8] text-white text-sm font-bold shadow-[0_8px_20px_-6px_rgba(104,65,184,0.5)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6841B8] cursor-pointer w-full sm:w-auto"
               >
-                <span>Explore Collections</span>
+                {/* Layered SVG Liquid Wave Crest */}
                 <svg
-                  className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5 group-active:translate-x-1.5"
+                  aria-hidden="true"
+                  className="explore-wave-crest"
+                  viewBox="0 0 240 60"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="cakezoneWaveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#6841B8" stopOpacity="0.9" />
+                      <stop offset="45%" stopColor="#B899F6" stopOpacity="0.65" />
+                      <stop offset="80%" stopColor="#F4B2D0" stopOpacity="0.55" />
+                      <stop offset="100%" stopColor="#E7C365" stopOpacity="0.45" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M0,22 C30,10 60,34 90,22 C120,10 150,34 180,22 C210,10 225,28 240,22 L240,60 L0,60 Z"
+                    fill="url(#cakezoneWaveGrad)"
+                  />
+                </svg>
+                <span className="relative z-10 tracking-wide">Explore Collections</span>
+                <svg
+                  className="relative z-10 w-4 h-4 transition-transform duration-300 group-hover:translate-x-1 group-focus-visible:translate-x-1"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -211,6 +293,11 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
+                  {cake.caption && (
+                    <span className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full bg-[#4E2F21]/90 backdrop-blur-xs text-white text-[10px] font-bold tracking-wider uppercase shadow-xs">
+                      {cake.caption}
+                    </span>
+                  )}
                 </div>
                 <div className="pt-2.5 sm:pt-3.5 pb-1.5 sm:pb-2 px-1 sm:px-2 flex flex-col flex-grow justify-between">
                   <div>
@@ -433,7 +520,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
               onClick={(e) => {
                 e.preventDefault();
-                alert('CakeZone Privacy Policy: We safeguard your personal data with high-grade encryption.');
+                setActivePolicyModal('privacy');
               }}
               href="#privacy"
             >
@@ -443,7 +530,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
               onClick={(e) => {
                 e.preventDefault();
-                alert('Terms of Service: Custom artisanal cake orders require 48 hours notice for bespoke sculpting.');
+                setActivePolicyModal('terms');
               }}
               href="#terms"
             >
@@ -471,10 +558,58 @@ export const Storefront: React.FC<StorefrontProps> = ({
             </a>
           </div>
           <div className="text-xs sm:text-sm text-on-surface-variant">
-            © 2023 CakeZone. All rights reserved.
+            © 2027 CakeZone. All rights reserved.
           </div>
         </div>
       </footer>
+
+      {/* Small Window Modal for Terms of Service & Privacy Policy */}
+      {activePolicyModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-surface-container-lowest max-w-md w-full p-5 sm:p-6 rounded-2xl shadow-2xl border border-outline-variant space-y-4">
+            <div className="flex justify-between items-center border-b border-outline-variant/60 pb-3">
+              <h3 className="text-base sm:text-lg font-bold text-on-surface">
+                <strong>
+                  {activePolicyModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+                </strong>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActivePolicyModal(null)}
+                className="text-on-surface-variant hover:text-on-surface cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto pr-1 text-xs sm:text-sm text-on-surface-variant leading-relaxed space-y-2">
+              {activePolicyModal === 'terms' ? (
+                <p>
+                  By accessing and using the CakeZone website, you agree to our terms and conditions. Customers must provide accurate information when placing orders for cakes, bakery products, or custom cake designs. All orders are subject to product availability, price confirmation, and acceptance by CakeZone. Product appearance may vary slightly from displayed images. We offer home delivery and store pickup where available, subject to confirmation. Customers should contact us promptly for order cancellations, modifications, refunds, or complaints, as eligibility may depend on the order status and applicable policies. Customers are responsible for checking their order details, delivery information, and customization requests before confirmation. All website content, branding, images, and designs are protected by applicable intellectual property laws. CakeZone reserves the right to update website content and these terms as necessary. Use of the website is also subject to our Privacy Policy and applicable laws of India. For assistance, please contact CakeZone through our official support channels.
+                </p>
+              ) : (
+                <p>
+                  At CakeZone, we respect your privacy and are committed to protecting your personal information. We may collect details such as your name, phone number, email address, delivery address, and order preferences to process cake orders, manage custom cake requests, arrange home delivery or store pickup, and provide customer support. If you place an order through WhatsApp or use third-party payment services, relevant information may be processed by those platforms under their respective privacy policies. We use reasonable security measures to protect your information and do not sell personal data as a business practice. Your information may be shared with trusted service providers when necessary to fulfil orders or comply with legal obligations. We retain personal information only as long as reasonably necessary for business and legal purposes. Subject to applicable law, you may request access to, correction of, or deletion of your personal information by contacting CakeZone through our official support channels. By using our website, you acknowledge this Privacy Policy and its terms, subject to any consent required by applicable Indian law.
+                </p>
+              )}
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setActivePolicyModal(null)}
+                className="w-full py-2.5 bg-primary text-on-primary text-xs sm:text-sm font-bold rounded-xl cursor-pointer hover:bg-primary/90 transition-all shadow-sm"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

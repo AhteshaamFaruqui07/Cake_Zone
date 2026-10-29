@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HERO_CAKE_URL } from '../data/initialData';
-import { createCustomCakeInDb } from '../services/supabaseData';
+import {
+  createCustomCakeInDb,
+  DEFAULT_CUSTOM_CAKE_SETTINGS,
+} from '../services/supabaseData';
+import { CustomCakeBuilderSettings } from '../types';
 
 interface CakeConfiguratorModalProps {
   isOpen: boolean;
@@ -11,23 +15,48 @@ interface CakeConfiguratorModalProps {
     image: string;
     details: string;
   }) => void;
+  settings?: CustomCakeBuilderSettings;
 }
 
 export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
   isOpen,
   onClose,
   onAddCustomCake,
+  settings,
 }) => {
+  const activeSettings = settings || DEFAULT_CUSTOM_CAKE_SETTINGS;
+  const tierOptions =
+    activeSettings.tiers && activeSettings.tiers.length > 0
+      ? activeSettings.tiers
+      : DEFAULT_CUSTOM_CAKE_SETTINGS.tiers;
+
   const [tiers, setTiers] = useState<number>(3);
-  const [spongeFlavor, setSpongeFlavor] = useState('Valrhona Chocolate Fudge');
-  const [filling, setFilling] = useState('Fleur de Sel Caramel & Toasted Pecans');
-  const [finish, setFinish] = useState('Smooth Velvet Buttercream with Ganache Drips');
-  const [accents, setAccents] = useState<string[]>([
-    '24k Edible Gold Leaf Flakes',
-    'Cascading Pastel Sugar Peonies',
-  ]);
+  const [spongeFlavor, setSpongeFlavor] = useState(
+    activeSettings.spongeFlavors[0] || 'Valrhona Chocolate Fudge'
+  );
+  const [filling, setFilling] = useState(
+    activeSettings.fillings[0] || 'Fleur de Sel Caramel & Toasted Pecans'
+  );
+  const [finish, setFinish] = useState(
+    activeSettings.exteriorFinishes[0] || 'Smooth Velvet Buttercream with Ganache Drips'
+  );
+  const [accents, setAccents] = useState<string[]>(
+    activeSettings.accents.slice(0, 2)
+  );
   const [inscription, setInscription] = useState('Happy Anniversary Eleanor & Marcus');
   const [eventDate, setEventDate] = useState('2026-11-15');
+
+  useEffect(() => {
+    if (activeSettings.spongeFlavors.length > 0 && !activeSettings.spongeFlavors.includes(spongeFlavor)) {
+      setSpongeFlavor(activeSettings.spongeFlavors[0]);
+    }
+    if (activeSettings.fillings.length > 0 && !activeSettings.fillings.includes(filling)) {
+      setFilling(activeSettings.fillings[0]);
+    }
+    if (activeSettings.exteriorFinishes.length > 0 && !activeSettings.exteriorFinishes.includes(finish)) {
+      setFinish(activeSettings.exteriorFinishes[0]);
+    }
+  }, [activeSettings, spongeFlavor, filling, finish]);
 
   if (!isOpen) return null;
 
@@ -39,9 +68,13 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
     }
   };
 
-  // Pricing calculation (INR)
-  const baseTierPrice = tiers === 1 ? 1499 : tiers === 2 ? 2799 : tiers === 3 ? 4499 : 6499;
-  const accentPrice = accents.length * 299;
+  // Dynamic Pricing calculation (INR) driven by Admin settings
+  const selectedTierObj =
+    tierOptions.find((t) => t.count === tiers) ||
+    tierOptions[0] || { count: tiers, label: `${tiers} Tiers`, guests: '25 - 35 guests', price: 2799 };
+  const baseTierPrice = Number(selectedTierObj.price) || 1499;
+  const perAccentPrice = Number(activeSettings.accentPrice ?? 299);
+  const accentPrice = accents.length * perAccentPrice;
   const totalPrice = baseTierPrice + accentPrice;
 
   const handleSaveAndAdd = async () => {
@@ -95,12 +128,7 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
               1. Choose Cake Architecture (Tiers &amp; Guest Count)
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { count: 1, label: '1 Tier', guests: '12 - 16 guests', price: '₹1,499' },
-                { count: 2, label: '2 Tiers', guests: '25 - 35 guests', price: '₹2,799' },
-                { count: 3, label: '3 Tiers', guests: '50 - 75 guests', price: '₹4,499' },
-                { count: 4, label: '4 Tiers', guests: '100+ guests', price: '₹6,499' },
-              ].map((t) => (
+              {tierOptions.map((t) => (
                 <button
                   key={t.count}
                   type="button"
@@ -113,7 +141,9 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
                 >
                   <p className="font-bold text-sm text-primary">{t.label}</p>
                   <p className="text-[11px] text-on-surface-variant">{t.guests}</p>
-                  <p className="text-xs font-semibold text-on-surface mt-1">{t.price}</p>
+                  <p className="text-xs font-semibold text-on-surface mt-1">
+                    ₹{Number(t.price).toLocaleString('en-IN')}
+                  </p>
                 </button>
               ))}
             </div>
@@ -125,13 +155,7 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
               2. Artisanal Sponge Flavor
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {[
-                'Valrhona Chocolate Fudge',
-                'Madagascar Bourbon Vanilla Bean',
-                'Kyoto Ceremonial Uji Matcha',
-                'Red Velvet Cocoa & French Butter',
-                'French Almond Frangipane',
-              ].map((flavor) => (
+              {activeSettings.spongeFlavors.map((flavor) => (
                 <button
                   key={flavor}
                   type="button"
@@ -154,13 +178,7 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
               3. Handcrafted Core Filling
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {[
-                'Fleur de Sel Caramel & Toasted Pecans',
-                '70% Guanaja Dark Chocolate Truffle',
-                'Wild Oregon Blackberry & Raspberry Coulis',
-                'Belgian White Chocolate Opalys Mousse',
-                'Crispy Hazelnut Praline Feuilletine',
-              ].map((fill) => (
+              {activeSettings.fillings.map((fill) => (
                 <button
                   key={fill}
                   type="button"
@@ -187,34 +205,21 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
               onChange={(e) => setFinish(e.target.value)}
               className="w-full p-2.5 text-xs bg-surface border border-outline-variant rounded-xl text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              <option value="Smooth Velvet Buttercream with Ganache Drips">
-                Smooth Velvet Buttercream with Dark Ganache Drips
-              </option>
-              <option value="Mirror Smooth Valrhona Dark Ganache Glaze">
-                Mirror Smooth Valrhona Dark Ganache Glaze
-              </option>
-              <option value="Rustic Semi-Naked with 24k Gold Edging">
-                Rustic Semi-Naked with 24k Gold Edging
-              </option>
-              <option value="Opulent Marble Royal Fondant Sculpture">
-                Opulent Marble Royal Fondant Sculpture
-              </option>
+              {activeSettings.exteriorFinishes.map((fin) => (
+                <option key={fin} value={fin}>
+                  {fin}
+                </option>
+              ))}
             </select>
           </div>
 
           {/* Accents (Multiselect) */}
           <div>
             <label className="block text-xs font-bold text-on-surface uppercase tracking-wider mb-2">
-              5. Bespoke Accents (+₹299 ea)
+              5. Bespoke Accents (+₹{perAccentPrice.toLocaleString('en-IN')} ea)
             </label>
             <div className="flex flex-wrap gap-2 text-xs">
-              {[
-                '24k Edible Gold Leaf Flakes',
-                'Cascading Pastel Sugar Peonies',
-                'Handcrafted Macaron Crown',
-                'Organic Forest Berries & Figs',
-                'Polished Florentine Silver Leaf',
-              ].map((accent) => {
+              {activeSettings.accents.map((accent) => {
                 const isSelected = accents.includes(accent);
                 return (
                   <button
@@ -290,3 +295,4 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
     </div>
   );
 };
+

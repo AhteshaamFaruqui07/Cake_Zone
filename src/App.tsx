@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ScreenType, CakeProduct, CartItem } from './types';
-import { INITIAL_CART } from './data/initialData';
+import { ScreenType, CakeProduct, CartItem, CustomCakeBuilderSettings } from './types';
+import { INITIAL_CART, SIGNATURE_CAKES, LOGO_URL } from './data/initialData';
 import { supabase } from './supabaseClient';
 import {
   fetchCartItems,
@@ -15,6 +15,10 @@ import {
   clearUserCartInDb,
   isUserAdminSync,
   resolveIsAdminFromSupabase,
+  recordUserLoginInSupabase,
+  fetchCakeProducts,
+  fetchCustomCakeSettings,
+  DEFAULT_CUSTOM_CAKE_SETTINGS,
 } from './services/supabaseData';
 import { Navbar } from './components/Navbar';
 import { Storefront } from './components/Storefront';
@@ -46,6 +50,10 @@ export default function App() {
     return 'storefront';
   });
   const [cartItems, setCartItems] = useState<CartItem[]>(INITIAL_CART);
+  const [cakes, setCakes] = useState<CakeProduct[]>(SIGNATURE_CAKES);
+  const [customCakeSettings, setCustomCakeSettings] = useState<CustomCakeBuilderSettings>(
+    DEFAULT_CUSTOM_CAKE_SETTINGS
+  );
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [quickViewCake, setQuickViewCake] = useState<CakeProduct | null>(null);
   const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false);
@@ -59,6 +67,21 @@ export default function App() {
   } | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState<string>('');
   const [authSuccessMessage, setAuthSuccessMessage] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [loaderProgressStarted, setLoaderProgressStarted] = useState<boolean>(false);
+
+  useEffect(() => {
+    const startTimer = window.setTimeout(() => {
+      setLoaderProgressStarted(true);
+    }, 30);
+    const loaderTimer = window.setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 3000);
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearTimeout(loaderTimer);
+    };
+  }, []);
 
   useEffect(() => {
     // Check if URL indicates a password reset recovery flow
@@ -104,11 +127,25 @@ export default function App() {
           email: userEmail,
         });
 
+        recordUserLoginInSupabase(session.user);
+
         const { data: dbCart } = await fetchCartItems();
         if (dbCart && dbCart.length > 0) {
           setCartItems(dbCart);
         }
       }
+
+      fetchCakeProducts().then(({ data: loadedCakes }) => {
+        if (loadedCakes && loadedCakes.length > 0) {
+          setCakes(loadedCakes);
+        }
+      });
+
+      fetchCustomCakeSettings().then((loadedSettings) => {
+        if (loadedSettings) {
+          setCustomCakeSettings(loadedSettings);
+        }
+      });
 
       // Check current URL path to protect private pages
       const path = window.location.pathname;
@@ -214,9 +251,20 @@ export default function App() {
             prev ? { ...prev, role: verifiedAdmin ? 'Admin' : 'Customer' } : prev
           );
         });
+        recordUserLoginInSupabase(session.user);
         fetchCartItems().then(({ data: dbCart }) => {
           if (dbCart) {
             setCartItems(dbCart);
+          }
+        });
+        fetchCakeProducts().then(({ data: loadedCakes }) => {
+          if (loadedCakes && loadedCakes.length > 0) {
+            setCakes(loadedCakes);
+          }
+        });
+        fetchCustomCakeSettings().then((loadedSettings) => {
+          if (loadedSettings) {
+            setCustomCakeSettings(loadedSettings);
           }
         });
         if (
@@ -360,11 +408,22 @@ export default function App() {
 
   const handleAddToCart = async (cake: CakeProduct, quantity = 1) => {
     const tempId = `cart-${Date.now()}`;
+    const fullCakeName = /cake/i.test(cake.name) ? cake.name : `${cake.name} Cake`;
+    const cakeTypeDetails = [
+      cake.category ? `${cake.category} Cake` : 'Signature Cake',
+      cake.caption || cake.tags?.[1],
+      cake.servings,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
     setCartItems((prev) => {
       const existing = prev.find((i) => i.cakeId === cake.id);
       if (existing) {
         return prev.map((i) =>
-          i.cakeId === cake.id ? { ...i, quantity: i.quantity + quantity } : i
+          i.cakeId === cake.id
+            ? { ...i, name: fullCakeName, details: cakeTypeDetails, quantity: i.quantity + quantity }
+            : i
         );
       }
       return [
@@ -372,24 +431,24 @@ export default function App() {
         {
           id: tempId,
           cakeId: cake.id,
-          name: cake.name,
+          name: fullCakeName,
           price: cake.price,
           quantity,
           image: cake.image,
-          details: cake.servings,
+          details: cakeTypeDetails,
         },
       ];
     });
-    showToast(`Added ${quantity}x "${cake.name}" to your artisanal bag.`);
+    showToast(`Added ${quantity}x "${fullCakeName}" to your artisanal bag.`);
     setIsCartOpen(true);
 
     const { data: savedItem } = await addCartItemToDb({
       cakeId: cake.id,
-      name: cake.name,
+      name: fullCakeName,
       price: cake.price,
       quantity,
       image: cake.image,
-      details: cake.servings,
+      details: cakeTypeDetails,
     });
     if (savedItem) {
       setCartItems((prev) =>
@@ -472,6 +531,54 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container relative">
+      {/* 3-Second CakeZone Startup Preloader */}
+      {isInitialLoading && (
+        <aside
+          aria-label="Loading CakeZone"
+          className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#fbf6f1] px-6 select-none"
+        >
+          <div className="relative flex items-center justify-center mb-6">
+            {/* Outer Spinning Ring */}
+            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-primary/15 border-t-primary animate-spin" />
+            {/* Center CakeZone Logo / Animated Cake */}
+            <div className="absolute inset-2.5 rounded-full bg-white shadow-lg border border-primary/20 flex items-center justify-center overflow-hidden">
+              <img
+                src="https://imagepaste.org/i/rnazzt2e.gif"
+                alt="CakeZone Loading"
+                className="w-full h-full object-cover scale-110"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = LOGO_URL;
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 mb-2">
+            <img
+              src={LOGO_URL}
+              alt="CakeZone Logo"
+              className="w-8 h-8 rounded-full object-cover shadow-xs"
+            />
+            <h1 className="text-2xl sm:text-3xl font-black font-headline text-primary tracking-tight">
+              CakeZone
+            </h1>
+          </div>
+
+          <p className="text-xs sm:text-sm font-medium text-on-surface-variant tracking-widest uppercase mb-6 text-center">
+            Sweet Moments • Happy People
+          </p>
+
+          {/* Animated 3-Second Progress Bar */}
+          <div className="w-48 sm:w-56 h-1.5 bg-primary/15 rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-gradient-to-r from-primary/70 via-primary to-primary rounded-full transition-[width] duration-[2950ms] ease-linear ${
+                loaderProgressStarted ? 'w-full' : 'w-0'
+              }`}
+            />
+          </div>
+        </aside>
+      )}
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-18 sm:top-24 left-1/2 transform -translate-x-1/2 z-[100] w-[calc(100%-2rem)] sm:w-auto max-w-md bg-primary text-on-primary px-4 sm:px-6 py-3 rounded-2xl sm:rounded-full shadow-2xl text-xs sm:text-sm font-semibold flex items-center justify-between sm:justify-center gap-2.5 animate-bounce">
@@ -510,6 +617,7 @@ export default function App() {
 
       {currentScreen === 'storefront' && (
         <Storefront
+          cakes={cakes}
           onQuickView={(cake) => {
             if (!currentUser) {
               handleRequireAuth(`view ${cake.name}`);
@@ -616,6 +724,10 @@ export default function App() {
             setIsConfiguratorOpen(true);
           }}
           onLogout={handleLogout}
+          cakes={cakes}
+          onCakesChange={setCakes}
+          customCakeSettings={customCakeSettings}
+          onCustomCakeSettingsChange={setCustomCakeSettings}
         />
       )}
 
@@ -628,6 +740,7 @@ export default function App() {
         onRemoveItem={handleRemoveItem}
         onClearCart={handleClearCart}
         customerName={currentUser?.name}
+        customerEmail={currentUser?.email}
       />
 
       {/* Bespoke Cake Configurator Modal */}
@@ -635,6 +748,7 @@ export default function App() {
         isOpen={isConfiguratorOpen}
         onClose={() => setIsConfiguratorOpen(false)}
         onAddCustomCake={handleAddCustomCake}
+        settings={customCakeSettings}
       />
 
       {/* Quick View Modal */}

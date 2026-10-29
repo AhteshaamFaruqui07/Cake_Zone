@@ -60,6 +60,7 @@
   --font-display: 'Public Sans', sans-serif;
   --font-body: 'Public Sans', sans-serif;
   --font-label: 'Public Sans', sans-serif;
+  --font-leckerli: 'Leckerli One', cursive;
 }
 
 @layer base {
@@ -95,4 +96,139 @@
 .fade-in-up.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+@keyframes typewriter-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.1;
+  }
+}
+
+@keyframes explore-wave-rotate {
+  0% {
+    transform: translate3d(-50%, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-48%, -2%, 0) rotate(180deg);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0) rotate(360deg);
+  }
+}
+
+@keyframes explore-wave-drift {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.explore-waves-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.35s ease;
+}
+
+.explore-waves-btn:hover,
+.explore-waves-btn:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -6px rgba(104, 65, 184, 0.45), 0 4px 10px -2px rgba(201, 167, 77, 0.22);
+}
+
+.explore-waves-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Primary rotating liquid wave (::before) - Purple (#6841B8), Pastel Lavender & Blush Pink */
+.explore-waves-btn::before,
+.explore-waves-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 260%;
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+  z-index: 1;
+  transition: top 0.75s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+}
+
+.explore-waves-btn::before {
+  top: 118%;
+  border-radius: 43% 47% 44% 46%;
+  background: linear-gradient(
+    135deg,
+    rgba(104, 65, 184, 0.92) 0%,
+    rgba(182, 149, 248, 0.78) 50%,
+    rgba(243, 176, 206, 0.72) 82%,
+    rgba(231, 195, 101, 0.55) 100%
+  );
+  animation: explore-wave-rotate 6.5s linear infinite;
+}
+
+/* Secondary counter-flowing liquid wave (::after) - Deep Purple (#6841B8) & Gold/Lavender crest */
+.explore-waves-btn::after {
+  top: 126%;
+  border-radius: 46% 42% 48% 41%;
+  background: linear-gradient(
+    225deg,
+    rgba(81, 50, 143, 0.92) 0%,
+    rgba(104, 65, 184, 0.88) 48%,
+    rgba(214, 188, 250, 0.55) 84%,
+    rgba(201, 167, 77, 0.48) 100%
+  );
+  animation: explore-wave-rotate 8.5s linear infinite reverse;
+}
+
+.explore-waves-btn:hover::before,
+.explore-waves-btn:focus-visible::before {
+  top: -175%;
+}
+
+.explore-waves-btn:hover::after,
+.explore-waves-btn:focus-visible::after {
+  top: -162%;
+}
+
+/* Third SVG horizontal flowing wave crest rising from bottom */
+.explore-waves-btn .explore-wave-crest {
+  position: absolute;
+  left: 0;
+  bottom: -110%;
+  width: 200%;
+  height: 120%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.85;
+  transition: bottom 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease;
+  animation: explore-wave-drift 4.2s linear infinite;
+}
+
+.explore-waves-btn:hover .explore-wave-crest,
+.explore-waves-btn:focus-visible .explore-wave-crest {
+  bottom: -8%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .explore-waves-btn,
+  .explore-waves-btn::before,
+  .explore-waves-btn::after,
+  .explore-waves-btn .explore-wave-crest {
+    animation: none !important;
+    transition: opacity 0.25s ease, background-color 0.25s ease !important;
+  }
+
+  .explore-waves-btn:hover,
+  .explore-waves-btn:focus-visible {
+    transform: none;
+    background-color: #6841B8;
+  }
 }
