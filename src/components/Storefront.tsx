@@ -1,15 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { CakeProduct } from '../types';
+import { CakeProduct, GalleryItem, GallerySectionSettings } from '../types';
 import {
   HERO_CAKE_URL,
   INGREDIENTS_IMAGE_URL,
   CHEFS_IMAGE_URL,
   SIGNATURE_CAKES,
   REVIEWS,
+  INITIAL_GALLERY_ITEMS,
+  DEFAULT_GALLERY_SECTION_SETTINGS,
 } from '../data/initialData';
+import {
+  createGalleryItemInDb,
+  updateGalleryItemInDb,
+  deleteGalleryItemFromDb,
+  saveGallerySectionSettings,
+} from '../services/supabaseData';
 
 interface StorefrontProps {
   cakes?: CakeProduct[];
+  galleryItems?: GalleryItem[];
+  onGalleryItemsChange?: (items: GalleryItem[]) => void;
+  gallerySettings?: GallerySectionSettings;
+  onGallerySettingsChange?: (settings: GallerySectionSettings) => void;
+  isAdmin?: boolean;
+  onShowToast?: (msg: string) => void;
   onQuickView: (cake: CakeProduct) => void;
   onOrderNow: (cake: CakeProduct) => void;
   onOpenConfigurator: () => void;
@@ -21,6 +35,12 @@ interface StorefrontProps {
 
 export const Storefront: React.FC<StorefrontProps> = ({
   cakes,
+  galleryItems: propGalleryItems,
+  onGalleryItemsChange,
+  gallerySettings: propGallerySettings,
+  onGallerySettingsChange,
+  isAdmin,
+  onShowToast,
   onQuickView,
   onOrderNow,
   onOpenConfigurator,
@@ -33,6 +53,184 @@ export const Storefront: React.FC<StorefrontProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activePolicyModal, setActivePolicyModal] = useState<'terms' | 'privacy' | null>(null);
   const [typedWord, setTypedWord] = useState<string>('Perfection');
+  const [likedInspirationIds, setLikedInspirationIds] = useState<Record<string, boolean>>({});
+
+  // Admin Gallery Management State
+  const [isGalleryAdminOpen, setIsGalleryAdminOpen] = useState(false);
+  const [sectionDraft, setSectionDraft] = useState<GallerySectionSettings>(
+    propGallerySettings || DEFAULT_GALLERY_SECTION_SETTINGS
+  );
+  const [isSavingSection, setIsSavingSection] = useState(false);
+
+  // Create New Gallery Item State
+  const [newTitle, setNewTitle] = useState('');
+  const [newSubHeading, setNewSubHeading] = useState('');
+  const [newCategory, setNewCategory] = useState('BESPOKE ROYAL');
+  const [newDescription, setNewDescription] = useState('');
+  const [newRowNumber, setNewRowNumber] = useState<1 | 2>(1);
+  const [newServings, setNewServings] = useState('10 - 14 Servings');
+  const [newLeadTime, setNewLeadTime] = useState('24 Hours Notice');
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState('');
+  const [isCreatingGalleryItem, setIsCreatingGalleryItem] = useState(false);
+
+  // Edit Existing Gallery Item State
+  const [editingGalleryId, setEditingGalleryId] = useState<string | null>(null);
+  const [editGalleryDraft, setEditGalleryDraft] = useState<{
+    title: string;
+    subHeading: string;
+    category: string;
+    description: string;
+    imageUrl: string;
+    servings: string;
+    leadTime: string;
+    rowNumber: 1 | 2;
+  }>({
+    title: '',
+    subHeading: '',
+    category: '',
+    description: '',
+    imageUrl: '',
+    servings: '',
+    leadTime: '',
+    rowNumber: 1,
+  });
+  const [editGalleryFile, setEditGalleryFile] = useState<File | null>(null);
+  const [editGalleryPreview, setEditGalleryPreview] = useState('');
+  const [isUpdatingGalleryItem, setIsUpdatingGalleryItem] = useState(false);
+  const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (propGallerySettings) {
+      setSectionDraft(propGallerySettings);
+    }
+  }, [propGallerySettings]);
+
+  const activeGallerySettings = propGallerySettings || DEFAULT_GALLERY_SECTION_SETTINGS;
+  const activeGalleryItems =
+    propGalleryItems && propGalleryItems.length > 0 ? propGalleryItems : INITIAL_GALLERY_ITEMS;
+
+  const row1GalleryItems = activeGalleryItems.filter((item) => item.rowNumber !== 2);
+  const row2GalleryItems = activeGalleryItems.filter((item) => item.rowNumber === 2);
+  const effectiveRow1 = row1GalleryItems.length > 0 ? row1GalleryItems : activeGalleryItems;
+  const effectiveRow2 = row2GalleryItems.length > 0 ? row2GalleryItems : activeGalleryItems;
+
+  const handleSaveGalleryHeader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSection(true);
+    try {
+      const { data, error } = await saveGallerySectionSettings(sectionDraft);
+      if (error) {
+        onShowToast?.(`Error saving gallery header: ${error.message || 'Failed'}`);
+        return;
+      }
+      onGallerySettingsChange?.(data);
+      onShowToast?.('Gallery section heading & description saved to Supabase!');
+    } finally {
+      setIsSavingSection(false);
+    }
+  };
+
+  const handleCreateGalleryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newDescription.trim()) {
+      onShowToast?.('Please enter a cake heading and description.');
+      return;
+    }
+    setIsCreatingGalleryItem(true);
+    try {
+      const { data: created, error } = await createGalleryItemInDb(
+        {
+          title: newTitle,
+          subHeading: newSubHeading,
+          category: newCategory,
+          description: newDescription,
+          imageUrl: newImageUrl,
+          servings: newServings,
+          leadTime: newLeadTime,
+          rowNumber: newRowNumber,
+          displayOrder: activeGalleryItems.length + 1,
+        },
+        newImageFile
+      );
+      if (error || !created) {
+        onShowToast?.(`Failed to create gallery item: ${error?.message || 'Error'}`);
+        return;
+      }
+      const nextList = [created, ...activeGalleryItems.filter((i) => i.id !== created.id)];
+      onGalleryItemsChange?.(nextList);
+      setNewTitle('');
+      setNewSubHeading('');
+      setNewDescription('');
+      setNewImageUrl('');
+      setNewImageFile(null);
+      setNewImagePreview('');
+      onShowToast?.(`"${created.title}" added to Inspiration Gallery in Supabase!`);
+    } finally {
+      setIsCreatingGalleryItem(false);
+    }
+  };
+
+  const handleStartEditGalleryItem = (item: GalleryItem) => {
+    setIsGalleryAdminOpen(true);
+    setEditingGalleryId(item.id);
+    setEditGalleryDraft({
+      title: item.title,
+      subHeading: item.subHeading || '',
+      category: item.category,
+      description: item.description,
+      imageUrl: item.image,
+      servings: item.servings,
+      leadTime: item.leadTime,
+      rowNumber: item.rowNumber,
+    });
+    setEditGalleryFile(null);
+    setEditGalleryPreview('');
+  };
+
+  const handleSaveEditGalleryItem = async (itemId: string) => {
+    setIsUpdatingGalleryItem(true);
+    try {
+      const { data: updated, error } = await updateGalleryItemInDb(
+        itemId,
+        editGalleryDraft,
+        editGalleryFile
+      );
+      if (error || !updated) {
+        onShowToast?.(`Error updating gallery item: ${error?.message || 'Failed'}`);
+        return;
+      }
+      const nextList = activeGalleryItems.map((i) => (i.id === itemId ? updated : i));
+      onGalleryItemsChange?.(nextList);
+      setEditingGalleryId(null);
+      setEditGalleryFile(null);
+      setEditGalleryPreview('');
+      onShowToast?.(`"${updated.title}" updated in Supabase!`);
+    } finally {
+      setIsUpdatingGalleryItem(false);
+    }
+  };
+
+  const handleDeleteGalleryItem = async (item: GalleryItem) => {
+    setDeletingGalleryId(item.id);
+    try {
+      await deleteGalleryItemFromDb(item.id, item.storagePath);
+      const nextList = activeGalleryItems.filter((i) => i.id !== item.id);
+      onGalleryItemsChange?.(nextList);
+      onShowToast?.(`"${item.title}" deleted from Supabase gallery.`);
+    } finally {
+      setDeletingGalleryId(null);
+    }
+  };
+
+  const toggleInspirationLike = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLikedInspirationIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   useEffect(() => {
     const fullWord = 'Perfection';
@@ -133,7 +331,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
         {/* Hero Content Canvas */}
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 md:px-12 w-full">
-          <div className="flex flex-col items-start gap-4 sm:gap-5 max-w-xl">
+          <div className="flex flex-col items-start gap-4 sm:gap-5 max-w-xl md:-mt-8 lg:-mt-10">
             {/* Welcome, Guest / User Heading */}
             <div className="inline-flex items-center gap-2 sm:gap-2.5 text-sm sm:text-base md:text-[17px] tracking-tight">
               <svg
@@ -182,7 +380,11 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 type="button"
                 onClick={() => {
                   handleProtectedAction(() => {
-                    document.getElementById('collections')?.scrollIntoView({ behavior: 'smooth' });
+                    const targetEl = document.getElementById('collections');
+                    if (targetEl) {
+                      const elementTop = targetEl.getBoundingClientRect().top + window.scrollY;
+                      window.scrollTo({ top: Math.max(0, elementTop - 76), behavior: 'smooth' });
+                    }
                   }, 'browse collections');
                 }}
                 className="explore-waves-btn group inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-full bg-[#6841B8] text-white text-sm font-bold shadow-[0_8px_20px_-6px_rgba(104,65,184,0.5)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6841B8] cursor-pointer w-full sm:w-auto"
@@ -196,10 +398,9 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 >
                   <defs>
                     <linearGradient id="cakezoneWaveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#6841B8" stopOpacity="0.9" />
-                      <stop offset="45%" stopColor="#B899F6" stopOpacity="0.65" />
-                      <stop offset="80%" stopColor="#F4B2D0" stopOpacity="0.55" />
-                      <stop offset="100%" stopColor="#E7C365" stopOpacity="0.45" />
+                      <stop offset="0%" stopColor="#D8B4FE" stopOpacity="0.88" />
+                      <stop offset="45%" stopColor="#A855F7" stopOpacity="0.75" />
+                      <stop offset="100%" stopColor="#0A0810" stopOpacity="0.95" />
                     </linearGradient>
                   </defs>
                   <path
@@ -226,9 +427,9 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 onClick={() => {
                   handleProtectedAction(onOpenConfigurator, 'design custom cakes');
                 }}
-                className="inline-flex items-center justify-center px-7 py-3.5 rounded-full bg-white/90 backdrop-blur-md text-[#51328F] text-sm font-bold border border-[#8B72BE]/60 hover:bg-white transition-all transform active:scale-95 shadow-xs cursor-pointer w-full sm:w-auto"
+                className="cakezone-btn-3 inline-flex items-center justify-center px-7 py-3.5 rounded-full bg-white/90 backdrop-blur-md text-[#51328F] text-sm font-bold border border-[#0f0b18] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0f0b18] shadow-xs cursor-pointer w-full sm:w-auto"
               >
-                Design Custom Cake
+                <span className="relative z-10">Design Custom Cake</span>
               </button>
             </div>
           </div>
@@ -236,7 +437,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
       </section>
 
       {/* Signature Collections Section */}
-      <section className="py-12 sm:py-16 md:py-20 bg-[#FBF7F2]" id="collections">
+      <section className="scroll-mt-20 sm:scroll-mt-24 py-12 sm:py-16 md:py-20 bg-[#FBF7F2]" id="collections">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Section Header */}
           <div className="max-w-3xl mb-6 sm:mb-8">
@@ -264,13 +465,13 @@ export const Storefront: React.FC<StorefrontProps> = ({
                   key={category}
                   type="button"
                   onClick={() => setSelectedCategory(category)}
-                  className={`px-5 sm:px-7 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-medium transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  className={`category-glass-shine-btn px-5 sm:px-7 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-medium cursor-pointer shrink-0 whitespace-nowrap ${
                     isActive
                       ? 'bg-[#4E2F21] text-white border border-[#4E2F21] shadow-xs'
-                      : 'bg-[#FAF6F0] text-[#2D2420] border border-[#E4DDD3] hover:border-[#4E2F21]/40 hover:bg-[#F3ECE2]'
+                      : 'bg-[#FAF6F0]/90 text-[#2D2420] border border-[#E4DDD3] hover:border-[#4E2F21]/40 hover:bg-[#F3ECE2]/95'
                   }`}
                 >
-                  {category}
+                  <span className="relative z-10">{category}</span>
                 </button>
               );
             })}
@@ -349,9 +550,580 @@ export const Storefront: React.FC<StorefrontProps> = ({
         </div>
       </section>
 
+      {/* Creative Gallery - Explore Our Design Inspiration (Dual Floating Cake Marquees) */}
+      <section
+        className="scroll-mt-20 sm:scroll-mt-24 pt-8 pb-14 sm:pt-10 sm:pb-18 md:pt-12 md:pb-20 bg-[#FAF6F0] border-t border-[#EDE5DA]/70 overflow-hidden relative"
+        id="inspiration-gallery"
+      >
+        {/* Header */}
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center mb-6 sm:mb-8">
+          <h2 className="text-3xl sm:text-4xl md:text-[50px] font-black font-headline text-[#140D26] tracking-tight leading-[1.12]">
+            {activeGallerySettings.heading}{' '}
+            <span className="italic font-serif bg-gradient-to-r from-[#6841B8] via-[#7C3AED] to-[#A855F7] bg-clip-text text-transparent pr-1">
+              {activeGallerySettings.subHeading}
+            </span>
+          </h2>
+
+          <p className="text-[#5C534E] text-sm sm:text-base md:text-[17px] mt-2.5 max-w-2xl mx-auto leading-relaxed">
+            {activeGallerySettings.description}
+          </p>
+        </div>
+
+        {/* Dual Floating Marquee Container */}
+        <div className="relative space-y-4 sm:space-y-5 -mt-1 sm:-mt-2">
+          {/* Soft Left & Right Edge Vignettes */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-3 sm:w-24 md:w-32 bg-gradient-to-r from-[#FAF6F0] via-[#FAF6F0]/70 to-transparent z-20" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-3 sm:w-24 md:w-32 bg-gradient-to-l from-[#FAF6F0] via-[#FAF6F0]/70 to-transparent z-20" />
+
+          {/* Row 1 - Floating Left */}
+          <div className="cakezone-marquee-row overflow-hidden py-1.5 -mt-1">
+            <div className="cakezone-marquee-track-left gap-2 sm:gap-6 px-2 sm:px-3">
+              {[...effectiveRow1, ...effectiveRow1].map((item, idx) => {
+                const isLiked = !!likedInspirationIds[item.id];
+                return (
+                  <div
+                    key={`${item.id}-row1-${idx}`}
+                    className="group/card relative w-[calc((100vw-24px)/3)] sm:w-[290px] md:w-[310px] h-[145px] sm:h-[330px] md:h-[350px] shrink-0 rounded-[14px] sm:rounded-[24px] bg-white p-1 sm:p-2 shadow-[0_10px_28px_-8px_rgba(20,13,38,0.1)] hover:shadow-[0_20px_40px_-10px_rgba(104,65,184,0.26)] border border-[#EDE5DA] transition-all duration-500 hover:-translate-y-1.5 select-none"
+                  >
+                    <div className="relative w-full h-full rounded-[10px] sm:rounded-[18px] overflow-hidden bg-[#F3ECE2]">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (target.src !== window.location.origin + item.fallbackImage) {
+                            target.src = item.fallbackImage;
+                          }
+                        }}
+                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/card:scale-110"
+                        loading="lazy"
+                      />
+
+                      {/* Top-Left Category Badge */}
+                      <span className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 z-20 px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/92 backdrop-blur-md text-[#1A1412] text-[7px] sm:text-[10px] font-extrabold tracking-[0.06em] sm:tracking-[0.08em] uppercase shadow-xs truncate max-w-[68%]">
+                        {item.category}
+                      </span>
+
+                      {/* Top-Right Heart Button */}
+                      <button
+                        type="button"
+                        aria-label={`Save ${item.title} to favorites`}
+                        onClick={(e) => toggleInspirationLike(item.id, e)}
+                        className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 z-20 w-5 h-5 sm:w-8 sm:h-8 rounded-full bg-white/92 backdrop-blur-md flex items-center justify-center shadow-xs transition-transform duration-200 hover:scale-110 active:scale-95 cursor-pointer"
+                      >
+                        <svg
+                          className={`w-2.5 h-2.5 sm:w-4 sm:h-4 transition-colors duration-200 ${
+                            isLiked ? 'text-[#EC4899] fill-[#EC4899]' : 'text-[#5C534E] fill-[#5C534E]/80'
+                          }`}
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                          />
+                        </svg>
+                      </button>
+
+                      {/* Hover Overlay with Kicker, Title, Sub-Heading & Description */}
+                      <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#120924]/95 via-[#120924]/65 to-transparent opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100 transition-all duration-300 flex flex-col justify-end p-2 sm:p-5">
+                        <span className="text-[7px] sm:text-[10px] font-extrabold tracking-[0.12em] sm:tracking-[0.14em] uppercase text-[#C084FC] translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300">
+                          {item.category}
+                        </span>
+                        <h3 className="text-[11px] sm:text-[20px] font-bold font-headline text-white leading-tight mt-0.5 translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300 delay-75 line-clamp-2">
+                          {item.title}
+                        </h3>
+                        {item.subHeading && (
+                          <p className="hidden sm:line-clamp-1 text-[10px] font-semibold text-[#E9D5FF] mt-0.5 translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300 delay-75">
+                            {item.subHeading}
+                          </p>
+                        )}
+                        <p className="hidden sm:line-clamp-2 text-xs text-white/85 mt-1 leading-relaxed translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300 delay-100">
+                          {item.description}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Row 2 - Floating Right */}
+          <div className="cakezone-marquee-row overflow-hidden py-1.5 -mt-1">
+            <div className="cakezone-marquee-track-right gap-2 sm:gap-6 px-2 sm:px-3">
+              {[...effectiveRow2, ...effectiveRow2].map((item, idx) => {
+                const isLiked = !!likedInspirationIds[item.id];
+                return (
+                  <div
+                    key={`${item.id}-row2-${idx}`}
+                    className="group/card relative w-[calc((100vw-24px)/3)] sm:w-[290px] md:w-[310px] h-[145px] sm:h-[330px] md:h-[350px] shrink-0 rounded-[14px] sm:rounded-[24px] bg-white p-1 sm:p-2 shadow-[0_10px_28px_-8px_rgba(20,13,38,0.1)] hover:shadow-[0_20px_40px_-10px_rgba(104,65,184,0.26)] border border-[#EDE5DA] transition-all duration-500 hover:-translate-y-1.5 select-none"
+                  >
+                    <div className="relative w-full h-full rounded-[10px] sm:rounded-[18px] overflow-hidden bg-[#F3ECE2]">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (target.src !== window.location.origin + item.fallbackImage) {
+                            target.src = item.fallbackImage;
+                          }
+                        }}
+                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/card:scale-110"
+                        loading="lazy"
+                      />
+
+                      {/* Top-Left Category Badge */}
+                      <span className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 z-20 px-1.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/92 backdrop-blur-md text-[#1A1412] text-[7px] sm:text-[10px] font-extrabold tracking-[0.06em] sm:tracking-[0.08em] uppercase shadow-xs truncate max-w-[68%]">
+                        {item.category}
+                      </span>
+
+                      {/* Top-Right Heart Button */}
+                      <button
+                        type="button"
+                        aria-label={`Save ${item.title} to favorites`}
+                        onClick={(e) => toggleInspirationLike(item.id, e)}
+                        className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 z-20 w-5 h-5 sm:w-8 sm:h-8 rounded-full bg-white/92 backdrop-blur-md flex items-center justify-center shadow-xs transition-transform duration-200 hover:scale-110 active:scale-95 cursor-pointer"
+                      >
+                        <svg
+                          className={`w-2.5 h-2.5 sm:w-4 sm:h-4 transition-colors duration-200 ${
+                            isLiked ? 'text-[#EC4899] fill-[#EC4899]' : 'text-[#5C534E] fill-[#5C534E]/80'
+                          }`}
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                          />
+                        </svg>
+                      </button>
+
+                      {/* Hover Overlay with Kicker, Title, Sub-Heading & Description */}
+                      <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#120924]/95 via-[#120924]/65 to-transparent opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100 transition-all duration-300 flex flex-col justify-end p-2 sm:p-5">
+                        <span className="text-[7px] sm:text-[10px] font-extrabold tracking-[0.12em] sm:tracking-[0.14em] uppercase text-[#C084FC] translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300">
+                          {item.category}
+                        </span>
+                        <h3 className="text-[11px] sm:text-[20px] font-bold font-headline text-white leading-tight mt-0.5 translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300 delay-75 line-clamp-2">
+                          {item.title}
+                        </h3>
+                        {item.subHeading && (
+                          <p className="hidden sm:line-clamp-1 text-[10px] font-semibold text-[#E9D5FF] mt-0.5 translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300 delay-75">
+                            {item.subHeading}
+                          </p>
+                        )}
+                        <p className="hidden sm:line-clamp-2 text-xs text-white/85 mt-1 leading-relaxed translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300 delay-100">
+                          {item.description}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Inline Admin Supabase Gallery Studio (Create, Upload Cake Image, Update, Delete) */}
+        {isAdmin && isGalleryAdminOpen && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 space-y-6">
+            <div className="bg-white rounded-2xl border border-[#EDE5DA] shadow-lg p-5 sm:p-6 space-y-6">
+              {/* 1. Section Header Settings */}
+              <form
+                onSubmit={handleSaveGalleryHeader}
+                className="pb-5 border-b border-[#EDE5DA] space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#6841B8]">
+                      Supabase Table: gallery_settings (user_id = auth.uid())
+                    </span>
+                    <h3 className="text-base font-bold text-[#140D26]">
+                      1. Edit Gallery Heading, Sub-Heading &amp; Description
+                    </h3>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSavingSection}
+                    className="px-4 py-2 rounded-xl bg-[#6841B8] text-white text-xs font-bold hover:bg-[#56339D] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingSection ? 'Saving...' : 'Save Section Header'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Main Heading
+                    </label>
+                    <input
+                      type="text"
+                      value={sectionDraft.heading}
+                      onChange={(e) =>
+                        setSectionDraft((prev) => ({ ...prev, heading: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs text-[#1A1412]"
+                      placeholder="Explore Our Design"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Highlighted Sub-Heading
+                    </label>
+                    <input
+                      type="text"
+                      value={sectionDraft.subHeading}
+                      onChange={(e) =>
+                        setSectionDraft((prev) => ({ ...prev, subHeading: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs text-[#6841B8] font-bold"
+                      placeholder="Inspiration"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Section Description
+                    </label>
+                    <input
+                      type="text"
+                      value={sectionDraft.description}
+                      onChange={(e) =>
+                        setSectionDraft((prev) => ({ ...prev, description: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs text-[#1A1412]"
+                      placeholder="Browse our handcrafted cake concepts..."
+                    />
+                  </div>
+                </div>
+              </form>
+
+              {/* 2. Create New Gallery Item + Upload Cake Image */}
+              <form
+                onSubmit={handleCreateGalleryItem}
+                className="pb-5 border-b border-[#EDE5DA] space-y-4"
+              >
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#6841B8]">
+                    Supabase Table: gallery_items + Storage Bucket: app-files
+                  </span>
+                  <h3 className="text-base font-bold text-[#140D26]">
+                    2. Create New Gallery Item &amp; Upload Cake Image
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Item Heading / Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      placeholder="e.g. Royal Pistachio Rose"
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Sub-Heading / Signature Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={newSubHeading}
+                      onChange={(e) => setNewSubHeading(e.target.value)}
+                      placeholder="e.g. Iranian Pistachio · Rosewater Chantilly"
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Type / Category Badge *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder="e.g. BESPOKE ROYAL"
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Marquee Row
+                    </label>
+                    <select
+                      value={newRowNumber}
+                      onChange={(e) => setNewRowNumber(Number(e.target.value) === 2 ? 2 : 1)}
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs"
+                    >
+                      <option value={1}>Row 1 (Floating Left)</option>
+                      <option value={2}>Row 2 (Floating Right)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-[#1A1412]">
+                      Upload Cake Image (Supabase Storage) or Paste URL
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="px-3.5 py-2 rounded-xl bg-[#F3E8FF] text-[#6841B8] text-xs font-bold cursor-pointer hover:bg-[#E9D5FF] transition-colors shrink-0 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm">cloud_upload</span>
+                        <span>Upload Cake Image</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setNewImageFile(file);
+                            setNewImagePreview(URL.createObjectURL(file));
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={newImageUrl}
+                        onChange={(e) => setNewImageUrl(e.target.value)}
+                        placeholder="Or paste cake image URL..."
+                        className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs"
+                      />
+                    </div>
+                    {(newImagePreview || newImageUrl) && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <img
+                          src={newImagePreview || newImageUrl}
+                          alt="Preview"
+                          className="w-10 h-10 rounded-lg object-cover border border-[#E4DDD3]"
+                        />
+                        <span className="text-[11px] text-emerald-700 font-semibold">
+                          {newImageFile
+                            ? `Ready to upload "${newImageFile.name}"`
+                            : 'Using image URL'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#1A1412] mb-1">
+                      Description *
+                    </label>
+                    <textarea
+                      rows={2}
+                      required
+                      value={newDescription}
+                      onChange={(e) => setNewDescription(e.target.value)}
+                      placeholder="Describe the cake concept, tiers, finish, and artistic inspiration..."
+                      className="w-full px-3 py-2 rounded-xl border border-[#E4DDD3] text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isCreatingGalleryItem}
+                    className="px-5 py-2.5 rounded-xl bg-[#4E2F21] text-white text-xs font-bold hover:bg-[#3B2217] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-sm">add_photo_alternate</span>
+                    <span>
+                      {isCreatingGalleryItem
+                        ? 'Uploading & Saving...'
+                        : 'Create Gallery Item in Supabase'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+
+              {/* 3. Update & Delete Existing Gallery Items */}
+              <div className="space-y-3">
+                <h3 className="text-base font-bold text-[#140D26]">
+                  3. Update or Delete Gallery Items ({activeGalleryItems.length})
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {activeGalleryItems.map((item) => {
+                    const isEditing = editingGalleryId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-xl border border-[#EDE5DA] bg-[#FCF9F5] p-2.5 flex flex-col justify-between gap-2"
+                      >
+                        <div>
+                          <div className="relative rounded-lg overflow-hidden aspect-[1.25/1] bg-[#F3ECE2]">
+                            <img
+                              src={
+                                isEditing && editGalleryPreview ? editGalleryPreview : item.image
+                              }
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/75 text-white text-[9px] font-bold uppercase">
+                              {item.category}
+                            </span>
+                            <span className="absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full bg-[#6841B8] text-white text-[9px] font-bold">
+                              Row {item.rowNumber}
+                            </span>
+                          </div>
+
+                          <div className="pt-2 space-y-1.5">
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={editGalleryDraft.title}
+                                  onChange={(e) =>
+                                    setEditGalleryDraft((d) => ({ ...d, title: e.target.value }))
+                                  }
+                                  className="w-full px-2 py-1 rounded border border-[#E4DDD3] text-xs font-bold bg-white"
+                                  placeholder="Heading / Title"
+                                />
+                                <input
+                                  type="text"
+                                  value={editGalleryDraft.subHeading}
+                                  onChange={(e) =>
+                                    setEditGalleryDraft((d) => ({
+                                      ...d,
+                                      subHeading: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full px-2 py-1 rounded border border-[#E4DDD3] text-[11px] bg-white"
+                                  placeholder="Sub-heading"
+                                />
+                                <div className="grid grid-cols-2 gap-1">
+                                  <input
+                                    type="text"
+                                    value={editGalleryDraft.category}
+                                    onChange={(e) =>
+                                      setEditGalleryDraft((d) => ({
+                                        ...d,
+                                        category: e.target.value,
+                                      }))
+                                    }
+                                    className="w-full px-2 py-1 rounded border border-[#E4DDD3] text-[10px] uppercase bg-white"
+                                    placeholder="Type"
+                                  />
+                                  <select
+                                    value={editGalleryDraft.rowNumber}
+                                    onChange={(e) =>
+                                      setEditGalleryDraft((d) => ({
+                                        ...d,
+                                        rowNumber: Number(e.target.value) === 2 ? 2 : 1,
+                                      }))
+                                    }
+                                    className="w-full px-2 py-1 rounded border border-[#E4DDD3] text-[10px] bg-white"
+                                  >
+                                    <option value={1}>Row 1</option>
+                                    <option value={2}>Row 2</option>
+                                  </select>
+                                </div>
+                                <textarea
+                                  rows={2}
+                                  value={editGalleryDraft.description}
+                                  onChange={(e) =>
+                                    setEditGalleryDraft((d) => ({
+                                      ...d,
+                                      description: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full px-2 py-1 rounded border border-[#E4DDD3] text-[11px] bg-white"
+                                />
+                                <label className="block px-2 py-1 rounded bg-[#F3E8FF] text-[#6841B8] text-[10px] font-bold text-center cursor-pointer">
+                                  Replace Cake Image
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (!f) return;
+                                      setEditGalleryFile(f);
+                                      setEditGalleryPreview(URL.createObjectURL(f));
+                                    }}
+                                    className="hidden"
+                                  />
+                                </label>
+                              </>
+                            ) : (
+                              <>
+                                <h4 className="font-bold text-xs text-[#1A1412] line-clamp-1">
+                                  {item.title}
+                                </h4>
+                                {item.subHeading && (
+                                  <p className="text-[10px] text-[#6841B8] font-medium line-clamp-1">
+                                    {item.subHeading}
+                                  </p>
+                                )}
+                                <p className="text-[11px] text-[#5C534E] line-clamp-2">
+                                  {item.description}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-[#EDE5DA] flex justify-between items-center gap-1.5">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={isUpdatingGalleryItem}
+                                onClick={() => handleSaveEditGalleryItem(item.id)}
+                                className="px-2.5 py-1 rounded-lg bg-[#6841B8] text-white text-xs font-bold cursor-pointer"
+                              >
+                                {isUpdatingGalleryItem ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingGalleryId(null)}
+                                className="px-2.5 py-1 rounded-lg border border-[#E4DDD3] text-xs font-semibold cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditGalleryItem(item)}
+                                className="px-2.5 py-1 rounded-lg bg-[#F3E8FF] text-[#6841B8] text-xs font-bold cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingGalleryId === item.id}
+                                onClick={() => handleDeleteGalleryItem(item)}
+                                className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                {deletingGalleryId === item.id ? 'Deleting...' : 'Delete'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* Our Craft / Story Section */}
-      <section className="py-14 sm:py-20 md:py-24 overflow-hidden" id="about">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-14 sm:space-y-24">
+      <section
+        className="scroll-mt-20 sm:scroll-mt-24 pt-8 pb-12 sm:pt-10 sm:pb-16 md:pt-12 md:pb-20 overflow-hidden"
+        id="about"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-10 sm:space-y-14">
           {/* Feature 1 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 items-center">
             <div className="space-y-4">
@@ -388,7 +1160,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
           </div>
 
           {/* Feature 2 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 items-center -mt-2 sm:-mt-4">
             <div className="order-2 md:order-1 relative">
               <img
                 src={CHEFS_IMAGE_URL}
@@ -426,7 +1198,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
       {/* Custom Cake Builder CTA Banner */}
       <section
-        className="py-14 sm:py-20 bg-primary-container text-on-primary-container relative overflow-hidden"
+        className="scroll-mt-20 sm:scroll-mt-24 py-14 sm:py-20 bg-primary-container text-on-primary-container relative overflow-hidden"
         id="custom-cakes"
       >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center relative z-10">
@@ -455,7 +1227,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
       </section>
 
       {/* Customer Reviews Section */}
-      <section className="py-14 sm:py-24 bg-surface-container-low" id="testimonials">
+      <section className="scroll-mt-20 sm:scroll-mt-24 py-14 sm:py-24 bg-surface-container-low" id="testimonials">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-16">
             <span className="text-primary font-bold text-xs sm:text-sm tracking-widest uppercase">

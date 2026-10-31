@@ -24,6 +24,15 @@ export interface CartItem {
   quantity: number;
   image: string;
   details?: string;
+  isCustomCake?: boolean;
+  customCakeData?: {
+    customerName: string;
+    phoneNumber: string;
+    eventDate: string;
+    designNotes: string;
+    referenceImageName?: string;
+    referenceImageUrl?: string;
+  };
 }
 
 export type OrderStatus = 'Pending' | 'Baking' | 'Delivered';
@@ -46,14 +55,17 @@ export interface Order {
 
 export interface LoggedInUserRecord {
   id: string;
-  userId: string;
+  userId?: string;
   name: string;
   email: string;
   phone: string;
   role: string;
+  city?: string;
   cityCode?: string;
   address?: string;
-  lastActive: string;
+  lastLoginAt?: string;
+  lastActive?: string;
+  avatarUrl?: string;
 }
 
 export interface CustomCakeTierOption {
@@ -102,3 +114,45 @@ export interface CustomCakeConfig {
   eventDate: string;
   estimatedPrice: number;
 }
+
+export interface GalleryItem {
+  id: string;
+  userId?: string;
+  category: string; // Type / Badge (e.g. 'BESPOKE ROYAL', 'WEDDING TIERED')
+  title: string; // Item Heading
+  subHeading?: string; // Sub-heading / Signature Notes
+  description: string; // Description
+  image: string; // Resolved image URL
+  storagePath?: string; // Supabase Storage path in 'app-files'
+  fallbackImage: string;
+  servings: string;
+  leadTime: string;
+  rowNumber: 1 | 2; // Row 1 (Left marquee) or Row 2 (Right marquee)
+  displayOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GallerySectionSettings {
+  heading: string;
+  subHeading: string;
+  description: string;
+}
+
+export interface SavedUserProfileRecord {
+  id: string;
+  userId?: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  cityCode?: string;
+  address: string;
+  coverImage?: string;
+  coverImageName?: string;
+  coverStoragePath?: string;
+  dietaryNotes: string;
+  savedAt: string;
+  role?: string;
+}
+
+

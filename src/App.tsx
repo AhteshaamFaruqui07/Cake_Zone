@@ -4,8 +4,21 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ScreenType, CakeProduct, CartItem, CustomCakeBuilderSettings } from './types';
-import { INITIAL_CART, SIGNATURE_CAKES, LOGO_URL } from './data/initialData';
+import {
+  ScreenType,
+  CakeProduct,
+  CartItem,
+  CustomCakeBuilderSettings,
+  GalleryItem,
+  GallerySectionSettings,
+} from './types';
+import {
+  INITIAL_CART,
+  SIGNATURE_CAKES,
+  LOGO_URL,
+  INITIAL_GALLERY_ITEMS,
+  DEFAULT_GALLERY_SECTION_SETTINGS,
+} from './data/initialData';
 import { supabase } from './supabaseClient';
 import {
   fetchCartItems,
@@ -19,6 +32,8 @@ import {
   fetchCakeProducts,
   fetchCustomCakeSettings,
   DEFAULT_CUSTOM_CAKE_SETTINGS,
+  fetchGalleryItems,
+  fetchGallerySectionSettings,
 } from './services/supabaseData';
 import { Navbar } from './components/Navbar';
 import { Storefront } from './components/Storefront';
@@ -51,12 +66,17 @@ export default function App() {
   });
   const [cartItems, setCartItems] = useState<CartItem[]>(INITIAL_CART);
   const [cakes, setCakes] = useState<CakeProduct[]>(SIGNATURE_CAKES);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(INITIAL_GALLERY_ITEMS);
+  const [gallerySettings, setGallerySettings] = useState<GallerySectionSettings>(
+    DEFAULT_GALLERY_SECTION_SETTINGS
+  );
   const [customCakeSettings, setCustomCakeSettings] = useState<CustomCakeBuilderSettings>(
     DEFAULT_CUSTOM_CAKE_SETTINGS
   );
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [quickViewCake, setQuickViewCake] = useState<CakeProduct | null>(null);
   const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false);
+  const [customBookingPhone, setCustomBookingPhone] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
@@ -138,6 +158,18 @@ export default function App() {
       fetchCakeProducts().then(({ data: loadedCakes }) => {
         if (loadedCakes && loadedCakes.length > 0) {
           setCakes(loadedCakes);
+        }
+      });
+
+      fetchGalleryItems().then(({ data: loadedGallery }) => {
+        if (loadedGallery && loadedGallery.length > 0) {
+          setGalleryItems(loadedGallery);
+        }
+      });
+
+      fetchGallerySectionSettings().then((loadedGallerySettings) => {
+        if (loadedGallerySettings) {
+          setGallerySettings(loadedGallerySettings);
         }
       });
 
@@ -260,6 +292,16 @@ export default function App() {
         fetchCakeProducts().then(({ data: loadedCakes }) => {
           if (loadedCakes && loadedCakes.length > 0) {
             setCakes(loadedCakes);
+          }
+        });
+        fetchGalleryItems().then(({ data: loadedGallery }) => {
+          if (loadedGallery && loadedGallery.length > 0) {
+            setGalleryItems(loadedGallery);
+          }
+        });
+        fetchGallerySectionSettings().then((loadedGallerySettings) => {
+          if (loadedGallerySettings) {
+            setGallerySettings(loadedGallerySettings);
           }
         });
         fetchCustomCakeSettings().then((loadedSettings) => {
@@ -471,17 +513,25 @@ export default function App() {
     price: number;
     image: string;
     details: string;
+    phoneNumber?: string;
+    isCustomCake?: boolean;
+    customCakeData?: CartItem['customCakeData'];
   }) => {
+    if (customCake.phoneNumber?.trim()) {
+      setCustomBookingPhone(customCake.phoneNumber.trim());
+    }
     const tempId = `cart-custom-${Date.now()}`;
     setCartItems((prev) => [
       ...prev,
       {
         id: tempId,
         name: customCake.name,
-        price: customCake.price,
+        price: 0,
         quantity: 1,
         image: customCake.image,
         details: customCake.details,
+        isCustomCake: true,
+        customCakeData: customCake.customCakeData,
       },
     ]);
     showToast(`Custom cake creation added to order bag.`);
@@ -489,13 +539,24 @@ export default function App() {
 
     const { data: savedItem } = await addCartItemToDb({
       name: customCake.name,
-      price: customCake.price,
+      price: 0,
       quantity: 1,
       image: customCake.image,
       details: customCake.details,
     });
     if (savedItem) {
-      setCartItems((prev) => prev.map((item) => (item.id === tempId ? savedItem : item)));
+      setCartItems((prev) =>
+        prev.map((item) =>
+          item.id === tempId
+            ? {
+                ...savedItem,
+                price: 0,
+                isCustomCake: true,
+                customCakeData: item.customCakeData,
+              }
+            : item
+        )
+      );
     }
   };
 
@@ -618,6 +679,12 @@ export default function App() {
       {currentScreen === 'storefront' && (
         <Storefront
           cakes={cakes}
+          galleryItems={galleryItems}
+          onGalleryItemsChange={setGalleryItems}
+          gallerySettings={gallerySettings}
+          onGallerySettingsChange={setGallerySettings}
+          isAdmin={currentUser?.role === 'Admin'}
+          onShowToast={showToast}
           onQuickView={(cake) => {
             if (!currentUser) {
               handleRequireAuth(`view ${cake.name}`);
@@ -726,6 +793,10 @@ export default function App() {
           onLogout={handleLogout}
           cakes={cakes}
           onCakesChange={setCakes}
+          galleryItems={galleryItems}
+          onGalleryItemsChange={setGalleryItems}
+          gallerySettings={gallerySettings}
+          onGallerySettingsChange={setGallerySettings}
           customCakeSettings={customCakeSettings}
           onCustomCakeSettingsChange={setCustomCakeSettings}
         />
@@ -741,6 +812,7 @@ export default function App() {
         onClearCart={handleClearCart}
         customerName={currentUser?.name}
         customerEmail={currentUser?.email}
+        prefilledPhone={customBookingPhone}
       />
 
       {/* Bespoke Cake Configurator Modal */}

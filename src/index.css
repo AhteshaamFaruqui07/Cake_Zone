@@ -141,14 +141,14 @@
 .explore-waves-btn:hover,
 .explore-waves-btn:focus-visible {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -6px rgba(104, 65, 184, 0.45), 0 4px 10px -2px rgba(201, 167, 77, 0.22);
+  box-shadow: 0 12px 24px -6px rgba(15, 10, 28, 0.55), 0 4px 12px -2px rgba(196, 161, 255, 0.45);
 }
 
 .explore-waves-btn:active {
   transform: translateY(0) scale(0.97);
 }
 
-/* Primary rotating liquid wave (::before) - Purple (#6841B8), Pastel Lavender & Blush Pink */
+/* Primary rotating liquid wave (::before) - Light Purple & Rich Black */
 .explore-waves-btn::before,
 .explore-waves-btn::after {
   content: "";
@@ -166,24 +166,22 @@
   border-radius: 43% 47% 44% 46%;
   background: linear-gradient(
     135deg,
-    rgba(104, 65, 184, 0.92) 0%,
-    rgba(182, 149, 248, 0.78) 50%,
-    rgba(243, 176, 206, 0.72) 82%,
-    rgba(231, 195, 101, 0.55) 100%
+    rgba(216, 180, 254, 0.92) 0%,
+    rgba(168, 85, 247, 0.85) 45%,
+    rgba(18, 12, 28, 0.95) 100%
   );
   animation: explore-wave-rotate 6.5s linear infinite;
 }
 
-/* Secondary counter-flowing liquid wave (::after) - Deep Purple (#6841B8) & Gold/Lavender crest */
+/* Secondary counter-flowing liquid wave (::after) - Deep Black & Light Purple crest */
 .explore-waves-btn::after {
   top: 126%;
   border-radius: 46% 42% 48% 41%;
   background: linear-gradient(
     225deg,
-    rgba(81, 50, 143, 0.92) 0%,
-    rgba(104, 65, 184, 0.88) 48%,
-    rgba(214, 188, 250, 0.55) 84%,
-    rgba(201, 167, 77, 0.48) 100%
+    rgba(10, 8, 16, 0.96) 0%,
+    rgba(28, 19, 43, 0.92) 52%,
+    rgba(196, 161, 255, 0.85) 100%
   );
   animation: explore-wave-rotate 8.5s linear infinite reverse;
 }
@@ -207,7 +205,7 @@
   height: 120%;
   z-index: 2;
   pointer-events: none;
-  opacity: 0.85;
+  opacity: 0.9;
   transition: bottom 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease;
   animation: explore-wave-drift 4.2s linear infinite;
 }
@@ -229,6 +227,254 @@
   .explore-waves-btn:hover,
   .explore-waves-btn:focus-visible {
     transform: none;
-    background-color: #6841B8;
+    background-color: #140D26;
   }
 }
+
+@keyframes btn3-border-orbit {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.cakezone-btn-3 {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1.5px solid #0f0b18;
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.35s ease,
+    color 0.35s ease;
+}
+
+/* Rotating conic-gradient luminous border beam on a sleek black lining track */
+.cakezone-btn-3::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 280%;
+  aspect-ratio: 1 / 1;
+  background: conic-gradient(
+    from 0deg,
+    #0a0710 0deg,
+    #0a0710 195deg,
+    #6841B8 240deg,
+    #C4B5FD 280deg,
+    #F472B6 320deg,
+    #E7C365 345deg,
+    #0a0710 360deg
+  );
+  transform: translate(-50%, -50%) rotate(0deg);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Inner pill mask with subtle black lining that reveals the 2.5px animated border beam around the edge */
+.cakezone-btn-3::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 9999px;
+  border: 1px solid rgba(15, 11, 24, 0.85);
+  background: rgba(255, 255, 255, 0.95);
+  transition: background 0.4s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cakezone-btn-3:hover,
+.cakezone-btn-3:focus-visible {
+  transform: translateY(-2px);
+  border-color: #0a0710;
+  color: #140D26;
+  box-shadow:
+    0 12px 26px -6px rgba(10, 7, 16, 0.4),
+    0 4px 14px -2px rgba(104, 65, 184, 0.32);
+}
+
+.cakezone-btn-3:hover::before,
+.cakezone-btn-3:focus-visible::before {
+  opacity: 1;
+  animation: btn3-border-orbit 2.4s linear infinite;
+}
+
+.cakezone-btn-3:hover::after,
+.cakezone-btn-3:focus-visible::after {
+  border-color: rgba(10, 7, 16, 0.45);
+  background: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    #f9f5ff 50%,
+    #fdf2f8 100%
+  );
+}
+
+.cakezone-btn-3:active {
+  transform: translateY(0) scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cakezone-btn-3,
+  .cakezone-btn-3::before,
+  .cakezone-btn-3::after {
+    animation: none !important;
+    transition: opacity 0.25s ease, background 0.25s ease, border-color 0.25s ease !important;
+  }
+
+  .cakezone-btn-3:hover,
+  .cakezone-btn-3:focus-visible {
+    transform: none;
+    border-color: #0a0710;
+  }
+}
+
+/* ==========================================================================
+   Category Filter Buttons - Glass Shining Hover Effect
+   ========================================================================== */
+
+.category-glass-shine-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
+}
+
+/* Subtle glossy glass top-edge highlight on hover */
+.category-glass-shine-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.08) 48%,
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Diagonal sweeping glass shine beam */
+.category-glass-shine-btn::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -10%;
+  width: 65%;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 10%,
+    rgba(255, 255, 255, 0.3) 35%,
+    rgba(255, 255, 255, 0.92) 50%,
+    rgba(255, 255, 255, 0.3) 65%,
+    rgba(255, 255, 255, 0) 90%
+  );
+  transform: translateX(-170%) skewX(-24deg);
+  transition: transform 0s;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.category-glass-shine-btn:hover,
+.category-glass-shine-btn:focus-visible {
+  transform: translateY(-1.5px);
+  box-shadow:
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.85),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.3),
+    0 6px 16px -4px rgba(78, 47, 33, 0.2);
+}
+
+.category-glass-shine-btn:hover::after,
+.category-glass-shine-btn:focus-visible::after {
+  opacity: 1;
+}
+
+.category-glass-shine-btn:hover::before,
+.category-glass-shine-btn:focus-visible::before {
+  transform: translateX(270%) skewX(-24deg);
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-glass-shine-btn,
+  .category-glass-shine-btn::before,
+  .category-glass-shine-btn::after {
+    transition: opacity 0.25s ease !important;
+  }
+
+  .category-glass-shine-btn:hover,
+  .category-glass-shine-btn:focus-visible {
+    transform: none;
+  }
+}
+
+/* ==========================================================================
+   Creative Gallery - Dual Floating Cake Marquees
+   ========================================================================== */
+
+@keyframes cakezone-marquee-left {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes cakezone-marquee-right {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.cakezone-marquee-track-left {
+  display: flex;
+  width: max-content;
+  animation: cakezone-marquee-left 42s linear infinite;
+  will-change: transform;
+}
+
+.cakezone-marquee-track-right {
+  display: flex;
+  width: max-content;
+  animation: cakezone-marquee-right 46s linear infinite;
+  will-change: transform;
+}
+
+.cakezone-marquee-row:hover .cakezone-marquee-track-left,
+.cakezone-marquee-row:hover .cakezone-marquee-track-right,
+.cakezone-marquee-row:focus-within .cakezone-marquee-track-left,
+.cakezone-marquee-row:focus-within .cakezone-marquee-track-right {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cakezone-marquee-track-left,
+  .cakezone-marquee-track-right {
+    animation: none !important;
+  }
+}
+
+

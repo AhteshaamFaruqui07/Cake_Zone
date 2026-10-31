@@ -23,7 +23,34 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>('home');
   const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (currentScreen !== 'storefront') return;
+
+    const sectionIds = ['collections', 'inspiration-gallery', 'about', 'custom-cakes', 'testimonials'];
+    const handleScroll = () => {
+      const headerHeight = headerRef.current?.offsetHeight || 72;
+      const scrollPosition = window.scrollY + headerHeight + 80;
+
+      if (window.scrollY < 200) {
+        setActiveSection('home');
+        return;
+      }
+
+      for (let i = sectionIds.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sectionIds[i]);
+        if (el && el.offsetTop <= scrollPosition) {
+          setActiveSection(sectionIds[i]);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [currentScreen]);
 
   useEffect(() => {
     if (!isMobileMenuOpen && !isDropdownOpen) return;
@@ -68,9 +95,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const scrollToSection = (sectionId: string, actionLabel: string) => {
     handleProtectedNav(() => {
+      setActiveSection(sectionId);
       onNavigate('storefront');
       setTimeout(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+        const targetEl = document.getElementById(sectionId);
+        if (targetEl) {
+          const headerHeight = headerRef.current?.offsetHeight || 72;
+          const elementTop = targetEl.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({
+            top: Math.max(0, elementTop - headerHeight - 8),
+            behavior: 'smooth',
+          });
+        }
       }, 60);
     }, actionLabel);
   };
@@ -87,6 +123,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           onClick={() => {
             setIsMobileMenuOpen(false);
+            setActiveSection('home');
             onNavigate('storefront');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
@@ -98,6 +135,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={(e) => {
               e.stopPropagation();
               setIsMobileMenuOpen(false);
+              setActiveSection('home');
               onNavigate('storefront');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
@@ -110,6 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={(e) => {
               e.stopPropagation();
               setIsMobileMenuOpen(false);
+              setActiveSection('home');
               onNavigate('storefront');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
@@ -125,12 +164,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             onClick={() => {
               handleProtectedNav(() => {
+                setActiveSection('home');
                 onNavigate('storefront');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }, 'navigate Home');
             }}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap ${
-              currentScreen === 'storefront'
+            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
+              currentScreen === 'storefront' && activeSection === 'home'
                 ? 'text-primary font-bold border-b-2 border-primary'
                 : 'text-on-surface-variant hover:text-primary font-medium'
             }`}
@@ -140,28 +180,55 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={() => scrollToSection('collections', 'browse collections')}
-            className="text-sm font-label text-on-surface-variant hover:text-primary font-medium transition-colors cursor-pointer whitespace-nowrap"
+            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
+              currentScreen === 'storefront' && activeSection === 'collections'
+                ? 'text-primary font-bold border-b-2 border-primary'
+                : 'text-on-surface-variant hover:text-primary font-medium'
+            }`}
           >
             Collections
           </button>
           <button
             type="button"
+            onClick={() => scrollToSection('inspiration-gallery', 'view Gallery section')}
+            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
+              currentScreen === 'storefront' && activeSection === 'inspiration-gallery'
+                ? 'text-primary font-bold border-b-2 border-primary'
+                : 'text-on-surface-variant hover:text-primary font-medium'
+            }`}
+          >
+            Gallery
+          </button>
+          <button
+            type="button"
             onClick={() => scrollToSection('about', 'view About section')}
-            className="text-sm font-label text-on-surface-variant hover:text-primary font-medium transition-colors cursor-pointer whitespace-nowrap"
+            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
+              currentScreen === 'storefront' && activeSection === 'about'
+                ? 'text-primary font-bold border-b-2 border-primary'
+                : 'text-on-surface-variant hover:text-primary font-medium'
+            }`}
           >
             About
           </button>
           <button
             type="button"
             onClick={() => scrollToSection('custom-cakes', 'customize cakes')}
-            className="text-sm font-label text-on-surface-variant hover:text-primary font-medium transition-colors cursor-pointer whitespace-nowrap"
+            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
+              currentScreen === 'storefront' && activeSection === 'custom-cakes'
+                ? 'text-primary font-bold border-b-2 border-primary'
+                : 'text-on-surface-variant hover:text-primary font-medium'
+            }`}
           >
             Custom Cakes
           </button>
           <button
             type="button"
             onClick={() => scrollToSection('testimonials', 'view testimonials')}
-            className="text-sm font-label text-on-surface-variant hover:text-primary font-medium transition-colors cursor-pointer whitespace-nowrap"
+            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
+              currentScreen === 'storefront' && activeSection === 'testimonials'
+                ? 'text-primary font-bold border-b-2 border-primary'
+                : 'text-on-surface-variant hover:text-primary font-medium'
+            }`}
           >
             Testimonial
           </button>
@@ -169,7 +236,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('signin')}
-              className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap ${
+              className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
                 currentScreen === 'signin'
                   ? 'text-primary font-bold border-b-2 border-primary'
                   : 'text-on-surface-variant hover:text-primary font-medium'
@@ -334,6 +401,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <span className="material-symbols-outlined text-base text-primary">cake</span>
                 <span>Collections</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => scrollToSection('inspiration-gallery', 'view Gallery section')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-on-surface hover:bg-surface-container transition-colors text-left cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-primary">photo_library</span>
+                <span>Gallery</span>
               </button>
 
               <button

@@ -190,6 +190,15 @@ export const UserProfile: React.FC<UserProfileProps> = ({
         }
       }
 
+      // Read local dataUrl fallback so cover preview persists across admin views even if storage RLS restricts cross-user signed URLs
+      const localDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () =>
+          resolve(typeof reader.result === 'string' ? reader.result : '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
+
       // Upload new cover file to private bucket "app-files" under:
       // ${auth.uid()}/profile-cover/${itemId}/${uuid}.${extension}
       const { storagePath, signedUrl, error: uploadError } = await uploadFileToAppStorage({
@@ -198,21 +207,25 @@ export const UserProfile: React.FC<UserProfileProps> = ({
         itemId: currentAuthUserId || undefined,
       });
 
-      if (uploadError || !storagePath) {
+      if (uploadError && !localDataUrl) {
         setErrorMessage(
           uploadError?.message || 'Failed to upload cover image to Supabase Storage.'
         );
         return;
       }
 
+      const resolvedPath =
+        storagePath ||
+        `${currentAuthUserId || 'user'}/profile-cover/${Date.now()}-${file.name}`;
+
       const next: UploadedProfileFile[] = [
         {
           name: file.name,
           size: file.size,
           type: file.type || 'image/jpeg',
-          path: storagePath,
-          storagePath,
-          dataUrl: signedUrl || undefined,
+          path: resolvedPath,
+          storagePath: resolvedPath,
+          dataUrl: signedUrl || localDataUrl || undefined,
         },
       ];
 
@@ -275,6 +288,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     const trimmedName = fullName.trim() || user?.name || 'Member';
     const trimmedEmail = email.trim() || user?.email || '';
     const formattedPhone = phone.trim() ? `+91 ${phone.trim().replace(/^\+91\s*/, '')}` : '+91';
+    const savedTimestamp = new Date().toISOString();
 
     try {
       // 1. Upsert into Supabase 'profiles' table (saves storagePath in uploaded_files)
@@ -308,6 +322,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
           address: address.trim(),
           dietary_notes: dietaryNotes.trim(),
           uploaded_files: fileSummaries,
+          profile_saved_at: savedTimestamp,
         },
       });
 

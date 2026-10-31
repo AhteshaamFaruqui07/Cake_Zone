@@ -1,4 +1,4 @@
-import { CakeProduct, CartItem, LowStockItem, Order, Review } from '../types';
+import { CakeProduct, CartItem, LowStockItem, Order, Review, GalleryItem, GallerySectionSettings } from '../types';
 
 export const LOGO_URL = 'https://lh3.googleusercontent.com/aida-public/AB6AXuBCtGwfamoWtmt5u344pIkL7As-GBsfcyExPz5SrzPuNio4NCOhWz-xk8j2pGXw3DvdD23tRVbL1ks4doTiqQ3K0CLEmnfIXN1gqT0HTY3Fe8pR9NLr-hOhhsCOSG1xRZ5dEMnJJwlWgnX07LXOVckSdAGdnX67X628kmktYo0ejqcrkog5tckJ4Cq94lzVuFKKR-XreRgkpLHaqUNEEWX8B3HRw6yvqrZC5WSl9cr44LZx5SGEd1hQCXCY2MdsnBXPnw';
 export const HERO_CAKE_URL = 'https://lh3.googleusercontent.com/aida-public/AB6AXuAJlNM16ulk1Up7BOPjHjzyPzXvUQjB1oFwrEdVZU5AMg7QgA9dlc1ZVaIBtwkDVhqwih1cn3XRcqd4InWU5V3Bh1Fzy7uY8GNI05CjyILLrLyvPGU36biebVsN8RMAXx7NzhG08jLx_lcITcItaRJGkdNGc3lA6PJIQF-fEcYBfYgmlxHNSpf2NCuBPei2hawlqX3dW4SRRjq2dPCYsQW0JKFSesTN-g6ZCIAVlDLQ7anKQvpWD-zP';
@@ -210,3 +210,154 @@ export const INITIAL_LOW_STOCK: LowStockItem[] = [
     icon: 'egg'
   }
 ];
+
+export const DEFAULT_GALLERY_SECTION_SETTINGS: GallerySectionSettings = {
+  heading: 'Explore Our Design',
+  subHeading: 'Inspiration',
+  description:
+    "Browse our handcrafted cake concepts and bespoke artistic designs floating live from our master bakers' studio.",
+};
+
+export const INITIAL_GALLERY_ITEMS: GalleryItem[] = [
+  {
+    id: 'insp-bespoke-royal',
+    category: 'BESPOKE ROYAL',
+    title: 'Royal Berry Drip',
+    subHeading: 'Ruby Couverture Drip · Madagascar Vanilla Sponge · Berry Compote',
+    description:
+      'Handcrafted pastel berry buttercream crowned with a playful waffle cone and ruby ganache drip.',
+    image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=900&q=80',
+    fallbackImage: '/assets/aistudio/cake_strawberry_dream.png',
+    servings: '12 - 16 Servings',
+    leadTime: '48 Hours Notice',
+    rowNumber: 1,
+    displayOrder: 1,
+  },
+  {
+    id: 'insp-themed-kids',
+    category: 'THEMED & KIDS',
+    title: 'Wonderland Enchanted',
+    subHeading: '70% Belgian Dark Truffle · Whipped Cocoa Rosettes · Fudge Crumb',
+    description:
+      'Whimsical themed cake complete with hand-sculpted chocolate rosettes and silky dark fudge ganache.',
+    image: '/assets/aistudio/cake_chocolate_truffle.png',
+    fallbackImage: '/assets/aistudio/cake_chocolate_truffle.png',
+    servings: '10 - 14 Servings',
+    leadTime: '24 Hours Notice',
+    rowNumber: 1,
+    displayOrder: 2,
+  },
+  {
+    id: 'insp-wedding-tiered',
+    category: 'WEDDING TIERED',
+    title: 'Elegance Gold Tiered',
+    subHeading: '24k Edible Gold Leaf · Swiss Meringue Buttercream · Champagne Sponge',
+    description:
+      'Hand-painted 24k edible gold leaf accents with majestic white floral blooms. Crafted for grand celebrations.',
+    image: '/assets/aistudio/cake_designer.png',
+    fallbackImage: '/assets/aistudio/cake_designer.png',
+    servings: '45 - 60 Servings',
+    leadTime: '5 Days Notice',
+    rowNumber: 1,
+    displayOrder: 3,
+  },
+  {
+    id: 'insp-floral-botanical',
+    category: 'FLORAL & BOTANICAL',
+    title: 'Botanical Bloom Dream',
+    subHeading: 'Fresh Orchard Raspberries · Mascarpone Chantilly · Mint Infusion',
+    description:
+      'Artisanal butter-piped organic botanical blossoms with soft blush gradient pastel raspberry layers.',
+    image: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=900&q=80',
+    fallbackImage: '/assets/aistudio/cake_red_velvet.png',
+    servings: '8 - 12 Servings',
+    leadTime: '24 Hours Notice',
+    rowNumber: 1,
+    displayOrder: 4,
+  },
+  {
+    id: 'insp-modern-minimalist',
+    category: 'MODERN & MINIMALIST',
+    title: 'Minimalist Noir Drip',
+    subHeading: 'Satin Ivory Frosting · Ecuadorian Dark Ganache · Espresso Bean Core',
+    description:
+      'Sleek architectural silhouette finished in satin ivory cream and dramatic single-origin dark chocolate drip.',
+    image: 'https://images.unsplash.com/photo-1535141192574-5d4897c12636?auto=format&fit=crop&w=900&q=80',
+    fallbackImage: '/assets/aistudio/cake_vanilla_fresh_cream.png',
+    servings: '10 - 12 Servings',
+    leadTime: '24 Hours Notice',
+    rowNumber: 1,
+    displayOrder: 5,
+  },
+  {
+    id: 'insp-luxury-event',
+    category: 'LUXURY EVENT',
+    title: 'Couture Petit Swirls',
+    subHeading: 'Bourbon Vanilla Bean · French Buttercream · Artisanal Sugar Pearls',
+    description:
+      'Delicate hand-piped vanilla bean clouds adorned with pastel sugar pearls for black-tie soirées.',
+    image: 'https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?auto=format&fit=crop&w=900&q=80',
+    fallbackImage: '/assets/aistudio/cake_vanilla_fresh_cream.png',
+    servings: '24 Couture Pieces',
+    leadTime: '24 Hours Notice',
+    rowNumber: 2,
+    displayOrder: 6,
+  },
+  {
+    id: 'insp-drip-art',
+    category: 'DRIP ART',
+    title: 'Midnight Cherry Drip',
+    subHeading: 'Kirsch-Soaked Morello Cherries · Shaved Dark Chocolate · Chantilly Cream',
+    description:
+      'Decadent dark cocoa tiers layered with whipped Chantilly cream, dark chocolate curls, and Morello cherries.',
+    image: '/assets/aistudio/cake_black_forest.png',
+    fallbackImage: '/assets/aistudio/cake_black_forest.png',
+    servings: '10 - 14 Servings',
+    leadTime: '24 Hours Notice',
+    rowNumber: 2,
+    displayOrder: 7,
+  },
+  {
+    id: 'insp-vintage-piping',
+    category: 'VINTAGE PIPING',
+    title: 'Vintage Piping Romance',
+    subHeading: 'Golden Caramel Mirror Glaze · Fresh Strawberries · Artisan Chocolate Lattice',
+    description:
+      'Intricate Lambeth-style piped buttercream and golden caramel glaze with romantic Victorian elegance.',
+    image: 'https://images.unsplash.com/photo-1542826438-bd32f43d626f?auto=format&fit=crop&w=900&q=80',
+    fallbackImage: '/assets/aistudio/cake_butterscotch_bliss.png',
+    servings: '12 - 15 Servings',
+    leadTime: '48 Hours Notice',
+    rowNumber: 2,
+    displayOrder: 8,
+  },
+  {
+    id: 'insp-architectural',
+    category: 'ARCHITECTURAL',
+    title: 'Palatial Rose Cascade',
+    subHeading: 'Hand-Sculpted Sugar Peonies · Rosewater Pistachio · Almond Marzipan',
+    description:
+      'Four-tier patisserie sculpture draped in cascading hand-sculpted blush and ivory sugar roses.',
+    image: 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&w=900&q=80',
+    fallbackImage: '/assets/aistudio/cake_designer.png',
+    servings: '60 - 80 Servings',
+    leadTime: '7 Days Notice',
+    rowNumber: 2,
+    displayOrder: 9,
+  },
+  {
+    id: 'insp-seasonal-garden',
+    category: 'SEASONAL GARDEN',
+    title: 'Seasonal Berry Symphony',
+    subHeading: 'Farm-Fresh Strawberries · Organic Blueberries · Light Sponge',
+    description:
+      'Sun-ripened strawberries and wild berries nestled over clouds of freshly whipped dairy cream.',
+    image: '/assets/aistudio/cake_strawberry_dream.png',
+    fallbackImage: '/assets/aistudio/cake_strawberry_dream.png',
+    servings: '8 - 10 Servings',
+    leadTime: 'Same Day Available',
+    rowNumber: 2,
+    displayOrder: 10,
+  },
+];
+

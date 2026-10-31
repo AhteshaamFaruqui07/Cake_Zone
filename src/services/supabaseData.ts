@@ -7,8 +7,15 @@ import {
   CakeProduct,
   LoggedInUserRecord,
   CustomCakeBuilderSettings,
+  GalleryItem,
+  GallerySectionSettings,
+  SavedUserProfileRecord,
 } from '../types';
-import { SIGNATURE_CAKES } from '../data/initialData';
+import {
+  SIGNATURE_CAKES,
+  INITIAL_GALLERY_ITEMS,
+  DEFAULT_GALLERY_SECTION_SETTINGS,
+} from '../data/initialData';
 
 export const PRIMARY_OWNER_ADMIN_EMAIL = 'ateeqfaruqui@gmail.com';
 
@@ -21,15 +28,22 @@ export const ADMIN_EMAILS: string[] = [
 // ============================================================================
 // SHARED MULTI-ADMIN SYNCHRONIZATION STORE
 // Ensures all admin accounts in ADMIN_EMAILS see identical Orders, Logins,
-// Inserted/Deleted Products, and Custom Cake data even when RLS scopes by user_id
+// Inserted/Deleted Products, Gallery Items, and Custom Cake data even when RLS scopes by user_id
 // ============================================================================
 const SHARED_STORE_KEYS = {
   orders: 'cakezone_shared_admin_orders_v1',
   deletedOrders: 'cakezone_shared_deleted_orders_v1',
   users: 'cakezone_shared_admin_users_v1',
+  savedProfiles: 'cakezone_shared_saved_profiles_v1',
+  deletedSavedProfiles: 'cakezone_shared_deleted_saved_profiles_v1',
+  profileCoverFallbacks: 'cakezone_shared_profile_covers_v1',
   products: 'cakezone_shared_admin_products_v1',
   deletedProducts: 'cakezone_shared_deleted_products_v1',
   productImageFallbacks: 'cakezone_shared_product_images_v1',
+  galleryItems: 'cakezone_shared_gallery_items_v1',
+  deletedGalleryItems: 'cakezone_shared_deleted_gallery_items_v1',
+  galleryImageFallbacks: 'cakezone_shared_gallery_images_v1',
+  gallerySettings: 'cakezone_shared_gallery_settings_v1',
   customCakeSettings: 'cakezone_shared_custom_cake_settings_v1',
   customCakes: 'cakezone_shared_custom_cakes_v1',
   deletedCustomCakes: 'cakezone_shared_deleted_custom_cakes_v1',
@@ -303,7 +317,7 @@ export const uploadFileToAppStorage = async (params: {
 
   const { data: signedData, error: signedError } = await supabase.storage
     .from(APP_FILES_BUCKET)
-    .createSignedUrl(data.path, 60 * 60); // 1 hour signed URL
+    .createSignedUrl(data.path, 60 * 60 * 24 * 365); // 1 year signed URL
 
   return {
     storagePath: data.path,
@@ -315,7 +329,7 @@ export const uploadFileToAppStorage = async (params: {
 
 export const createSignedUrlForAppFile = async (
   storagePath: string,
-  expiresInSeconds = 3600
+  expiresInSeconds = 60 * 60 * 24 * 365
 ): Promise<string | null> => {
   if (!storagePath) return null;
   const { data, error } = await supabase.storage
@@ -367,6 +381,7 @@ export const upsertUserProfile = async (profile: ProfileRecord) => {
   if (!userId) return { data: null, error: new Error('Not authenticated') };
 
   const isAdmin = await resolveIsAdminFromSupabase(session?.user);
+  const savedAtIso = new Date().toISOString();
 
   // Store only file metadata + storage path in the database (never transient signed URLs)
   const dbFiles = (profile.uploaded_files || []).map((f) => ({
@@ -377,7 +392,7 @@ export const upsertUserProfile = async (profile: ProfileRecord) => {
     storagePath: f.storagePath || f.path || '',
   }));
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('profiles')
     .upsert(
       {
@@ -390,15 +405,114 @@ export const upsertUserProfile = async (profile: ProfileRecord) => {
         dietary_notes: profile.dietary_notes,
         uploaded_files: dbFiles,
         role: isAdmin ? 'Admin' : 'Customer',
+        updated_at: savedAtIso,
       },
       { onConflict: 'user_id' }
     )
     .select()
     .single();
 
+  if (error) {
+    const fallbackUpsert = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          user_id: userId,
+          full_name: profile.full_name,
+          email: profile.email,
+          phone: profile.phone,
+          city_code: profile.city_code,
+          address: profile.address,
+          dietary_notes: profile.dietary_notes,
+          uploaded_files: dbFiles,
+          role: isAdmin ? 'Admin' : 'Customer',
+        },
+        { onConflict: 'user_id' }
+      )
+      .select()
+      .single();
+    data = fallbackUpsert.data;
+    error = fallbackUpsert.error;
+  }
+
+  const cleanEmail = (profile.email || session?.user?.email || '').trim();
+  const latestFile = [...(profile.uploaded_files || [])].reverse()[0];
+  const coverStoragePath = latestFile?.storagePath || latestFile?.path || '';
+  const coverImagePreview = latestFile?.dataUrl || '';
+
+  if (coverImagePreview) {
+    const coverFallbacks = readSharedStore<Record<string, string>>(
+      SHARED_STORE_KEYS.profileCoverFallbacks,
+      {}
+    );
+    coverFallbacks[userId] = coverImagePreview;
+    if (cleanEmail) {
+      coverFallbacks[cleanEmail.toLowerCase()] = coverImagePreview;
+    }
+    if (coverStoragePath) {
+      coverFallbacks[coverStoragePath] = coverImagePreview;
+    }
+    writeSharedStore(SHARED_STORE_KEYS.profileCoverFallbacks, coverFallbacks);
+  }
+
+  // Sync saved profile record into shared admin savedProfiles store
+  const savedProfiles = readSharedStore<SavedUserProfileRecord[]>(
+    SHARED_STORE_KEYS.savedProfiles,
+    []
+  );
+  const existingSaved = savedProfiles.find(
+    (sp) =>
+      sp.userId === userId ||
+      sp.id === userId ||
+      (cleanEmail && sp.email.trim().toLowerCase() === cleanEmail.toLowerCase())
+  );
+
+  const savedProfileEntry: SavedUserProfileRecord = {
+    id: userId,
+    userId,
+    fullName: profile.full_name || cleanEmail.split('@')[0] || 'CakeZone Member',
+    email: cleanEmail || '—',
+    phone: profile.phone || '—',
+    cityCode: profile.city_code || '',
+    address: profile.address || '—',
+    coverImage:
+      (profile.uploaded_files && profile.uploaded_files.length === 0
+        ? ''
+        : coverImagePreview || existingSaved?.coverImage || ''),
+    coverImageName:
+      profile.uploaded_files && profile.uploaded_files.length === 0
+        ? ''
+        : latestFile?.name || existingSaved?.coverImageName || '',
+    coverStoragePath:
+      profile.uploaded_files && profile.uploaded_files.length === 0
+        ? ''
+        : coverStoragePath || existingSaved?.coverStoragePath || '',
+    dietaryNotes: profile.dietary_notes || '—',
+    savedAt: savedAtIso,
+    role: isAdmin ? 'Admin' : 'Customer',
+  };
+
+  writeSharedStore(SHARED_STORE_KEYS.savedProfiles, [
+    savedProfileEntry,
+    ...savedProfiles.filter(
+      (sp) =>
+        sp.id !== userId &&
+        sp.userId !== userId &&
+        (!cleanEmail || sp.email.trim().toLowerCase() !== cleanEmail.toLowerCase())
+    ),
+  ]);
+
+  // Remove from deletedSavedProfiles if re-saved
+  const deletedSaved = readSharedStore<string[]>(SHARED_STORE_KEYS.deletedSavedProfiles, []);
+  if (deletedSaved.length > 0) {
+    writeSharedStore(
+      SHARED_STORE_KEYS.deletedSavedProfiles,
+      deletedSaved.filter((id) => id !== userId && id !== cleanEmail.toLowerCase())
+    );
+  }
+
   // Also sync updated profile details into the shared admin users cache
   const sharedUsers = readSharedStore<LoggedInUserRecord[]>(SHARED_STORE_KEYS.users, []);
-  const cleanEmail = (profile.email || session?.user?.email || '').trim();
   const updatedUserRecord: LoggedInUserRecord = {
     id: userId,
     name: profile.full_name || cleanEmail.split('@')[0] || 'CakeZone User',
@@ -406,7 +520,7 @@ export const upsertUserProfile = async (profile: ProfileRecord) => {
     phone: profile.phone || '—',
     role: isAdmin ? 'Admin' : 'Customer',
     city: profile.city_code || profile.address || '—',
-    lastLoginAt: new Date().toISOString(),
+    lastLoginAt: savedAtIso,
   };
   writeSharedStore(SHARED_STORE_KEYS.users, [
     updatedUserRecord,
@@ -436,6 +550,7 @@ export const syncProfileUploadedFilesInDb = async (
   if (!userId) return { error: new Error('Not authenticated') };
 
   const isAdmin = await resolveIsAdminFromSupabase(session?.user);
+  const savedAtIso = new Date().toISOString();
 
   const dbFiles = files.map((f) => ({
     name: f.name,
@@ -444,6 +559,19 @@ export const syncProfileUploadedFilesInDb = async (
     path: f.storagePath || f.path || '',
     storagePath: f.storagePath || f.path || '',
   }));
+
+  const resolvedName =
+    fallbackProfile?.full_name ||
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.email?.split('@')[0] ||
+    'Member';
+  const resolvedEmail = (fallbackProfile?.email || session?.user?.email || '').trim();
+  const resolvedPhone = fallbackProfile?.phone || session?.user?.user_metadata?.phone || '';
+  const resolvedCityCode =
+    fallbackProfile?.city_code || session?.user?.user_metadata?.city_code || '';
+  const resolvedAddress = fallbackProfile?.address || session?.user?.user_metadata?.address || '';
+  const resolvedDietary =
+    fallbackProfile?.dietary_notes || session?.user?.user_metadata?.dietary_notes || '';
 
   // Check if profile row already exists
   const { data: existing } = await supabase
@@ -463,16 +591,12 @@ export const syncProfileUploadedFilesInDb = async (
     const { error } = await supabase.from('profiles').upsert(
       {
         user_id: userId,
-        full_name:
-          fallbackProfile?.full_name ||
-          session?.user?.user_metadata?.full_name ||
-          session?.user?.email?.split('@')[0] ||
-          'Member',
-        email: fallbackProfile?.email || session?.user?.email || '',
-        phone: fallbackProfile?.phone || '',
-        city_code: fallbackProfile?.city_code || '',
-        address: fallbackProfile?.address || '',
-        dietary_notes: fallbackProfile?.dietary_notes || '',
+        full_name: resolvedName,
+        email: resolvedEmail,
+        phone: resolvedPhone,
+        city_code: resolvedCityCode,
+        address: resolvedAddress,
+        dietary_notes: resolvedDietary,
         uploaded_files: dbFiles,
         role: isAdmin ? 'Admin' : 'Customer',
       },
@@ -481,14 +605,318 @@ export const syncProfileUploadedFilesInDb = async (
     dbError = error;
   }
 
+  const latestFile = [...files].reverse()[0];
+  const coverStoragePath = latestFile?.storagePath || latestFile?.path || '';
+  const coverImagePreview = latestFile?.dataUrl || '';
+
+  const coverFallbacks = readSharedStore<Record<string, string>>(
+    SHARED_STORE_KEYS.profileCoverFallbacks,
+    {}
+  );
+  if (files.length === 0) {
+    delete coverFallbacks[userId];
+    if (resolvedEmail) delete coverFallbacks[resolvedEmail.toLowerCase()];
+  } else if (coverImagePreview) {
+    coverFallbacks[userId] = coverImagePreview;
+    if (resolvedEmail) coverFallbacks[resolvedEmail.toLowerCase()] = coverImagePreview;
+    if (coverStoragePath) coverFallbacks[coverStoragePath] = coverImagePreview;
+  }
+  writeSharedStore(SHARED_STORE_KEYS.profileCoverFallbacks, coverFallbacks);
+
+  // Also sync into shared savedProfiles store
+  const savedProfiles = readSharedStore<SavedUserProfileRecord[]>(
+    SHARED_STORE_KEYS.savedProfiles,
+    []
+  );
+  const existingSaved = savedProfiles.find(
+    (sp) =>
+      sp.userId === userId ||
+      sp.id === userId ||
+      (resolvedEmail && sp.email.trim().toLowerCase() === resolvedEmail.toLowerCase())
+  );
+
+  const updatedSavedProfile: SavedUserProfileRecord = {
+    id: userId,
+    userId,
+    fullName: resolvedName || existingSaved?.fullName || 'CakeZone Member',
+    email: resolvedEmail || existingSaved?.email || '—',
+    phone: resolvedPhone || existingSaved?.phone || '—',
+    cityCode: resolvedCityCode || existingSaved?.cityCode || '',
+    address: resolvedAddress || existingSaved?.address || '—',
+    coverImage: files.length === 0 ? '' : coverImagePreview || existingSaved?.coverImage || '',
+    coverImageName: files.length === 0 ? '' : latestFile?.name || existingSaved?.coverImageName || '',
+    coverStoragePath: files.length === 0 ? '' : coverStoragePath || existingSaved?.coverStoragePath || '',
+    dietaryNotes: resolvedDietary || existingSaved?.dietaryNotes || '—',
+    savedAt: savedAtIso,
+    role: isAdmin ? 'Admin' : 'Customer',
+  };
+
+  writeSharedStore(SHARED_STORE_KEYS.savedProfiles, [
+    updatedSavedProfile,
+    ...savedProfiles.filter(
+      (sp) =>
+        sp.id !== userId &&
+        sp.userId !== userId &&
+        (!resolvedEmail || sp.email.trim().toLowerCase() !== resolvedEmail.toLowerCase())
+    ),
+  ]);
+
   // Also keep auth user_metadata in sync
   await supabase.auth.updateUser({
     data: {
       uploaded_files: dbFiles,
+      profile_saved_at: savedAtIso,
     },
   });
 
   return { error: dbError };
+};
+
+export const fetchSavedUserProfilesFromSupabase = async (): Promise<{
+  data: SavedUserProfileRecord[];
+  error: any;
+}> => {
+  const deletedIds = new Set(
+    readSharedStore<string[]>(SHARED_STORE_KEYS.deletedSavedProfiles, [])
+  );
+  const coverFallbacks = readSharedStore<Record<string, string>>(
+    SHARED_STORE_KEYS.profileCoverFallbacks,
+    {}
+  );
+  const sharedSavedProfiles = readSharedStore<SavedUserProfileRecord[]>(
+    SHARED_STORE_KEYS.savedProfiles,
+    []
+  );
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { data: profilesRows, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  const resolveCoverUrl = async (
+    storagePath?: string,
+    userId?: string,
+    email?: string,
+    existingUrl?: string
+  ): Promise<string> => {
+    if (storagePath && isStorageFilePath(storagePath)) {
+      const signed = await createSignedUrlForAppFile(storagePath);
+      if (signed) return signed;
+      if (coverFallbacks[storagePath]) return coverFallbacks[storagePath];
+    }
+    if (existingUrl && !isStorageFilePath(existingUrl)) {
+      return existingUrl;
+    }
+    if (userId && coverFallbacks[userId]) {
+      return coverFallbacks[userId];
+    }
+    if (email && coverFallbacks[email.trim().toLowerCase()]) {
+      return coverFallbacks[email.trim().toLowerCase()];
+    }
+    return '';
+  };
+
+  const byKey = new Map<string, SavedUserProfileRecord>();
+
+  // 1. Load shared saved profiles first
+  for (const sp of sharedSavedProfiles) {
+    const emailKey = sp.email && sp.email !== '—' ? sp.email.trim().toLowerCase() : '';
+    const key = emailKey || sp.userId || sp.id;
+    if (!key || deletedIds.has(sp.id) || (emailKey && deletedIds.has(emailKey))) continue;
+
+    const resolvedCover = await resolveCoverUrl(
+      sp.coverStoragePath,
+      sp.userId || sp.id,
+      sp.email,
+      sp.coverImage
+    );
+
+    byKey.set(key, {
+      ...sp,
+      coverImage: resolvedCover,
+    });
+  }
+
+  // 2. Overlay live rows from Supabase `profiles` table
+  if (!error && Array.isArray(profilesRows)) {
+    for (const row of profilesRows) {
+      const uid = String(row.user_id || row.id || '');
+      const email = String(row.email || '').trim();
+      const emailKey = email ? email.toLowerCase() : '';
+      const key = emailKey || uid;
+      if (!key || deletedIds.has(uid) || (emailKey && deletedIds.has(emailKey))) continue;
+
+      const existing = byKey.get(key);
+      const uploadedFiles: ProfileUploadedFile[] = Array.isArray(row.uploaded_files)
+        ? row.uploaded_files
+        : [];
+      const latestFile = [...uploadedFiles].reverse()[0];
+      const storagePath =
+        latestFile?.storagePath ||
+        latestFile?.path ||
+        existing?.coverStoragePath ||
+        '';
+      const fileName = latestFile?.name || existing?.coverImageName || '';
+
+      const resolvedCover = await resolveCoverUrl(
+        storagePath,
+        uid,
+        email,
+        latestFile?.dataUrl || existing?.coverImage
+      );
+
+      const fullAddress =
+        row.address && row.city_code
+          ? `${row.address} (${row.city_code})`
+          : row.address || existing?.address || row.city_code || '—';
+
+      const savedTimestamp =
+        row.updated_at ||
+        existing?.savedAt ||
+        row.created_at ||
+        new Date().toISOString();
+
+      const isAdminRole =
+        String(row.role || '').trim().toLowerCase() === 'admin' || isAdminEmail(email);
+
+      byKey.set(key, {
+        id: uid || existing?.id || `profile-${emailKey}`,
+        userId: uid || existing?.userId,
+        fullName:
+          row.full_name ||
+          existing?.fullName ||
+          (email ? email.split('@')[0] : 'CakeZone Member'),
+        email: email || existing?.email || '—',
+        phone:
+          row.phone && row.phone !== '+91'
+            ? row.phone
+            : existing?.phone && existing.phone !== '+91'
+            ? existing.phone
+            : '—',
+        cityCode: row.city_code || existing?.cityCode || '',
+        address: fullAddress,
+        coverImage: resolvedCover,
+        coverImageName: fileName,
+        coverStoragePath: storagePath,
+        dietaryNotes:
+          row.dietary_notes ||
+          existing?.dietaryNotes ||
+          '—',
+        savedAt: savedTimestamp,
+        role: isAdminRole ? 'Admin' : 'Customer',
+      });
+    }
+  }
+
+  // 3. Also check active session user's user_metadata if they saved profile details
+  if (session?.user) {
+    const authUser = session.user;
+    const meta = authUser.user_metadata || {};
+    const email = (meta.profile_email || authUser.email || '').trim();
+    const emailKey = email.toLowerCase();
+    const key = emailKey || authUser.id;
+
+    if (
+      key &&
+      !deletedIds.has(authUser.id) &&
+      (!emailKey || !deletedIds.has(emailKey)) &&
+      (meta.full_name || meta.phone || meta.address || meta.dietary_notes || meta.uploaded_files)
+    ) {
+      const existing = byKey.get(key);
+      const metaFiles: ProfileUploadedFile[] = Array.isArray(meta.uploaded_files)
+        ? meta.uploaded_files
+        : [];
+      const latestMetaFile = [...metaFiles].reverse()[0];
+      const storagePath =
+        latestMetaFile?.storagePath ||
+        latestMetaFile?.path ||
+        existing?.coverStoragePath ||
+        '';
+      const resolvedCover = await resolveCoverUrl(
+        storagePath,
+        authUser.id,
+        email,
+        existing?.coverImage
+      );
+
+      const addressVal =
+        meta.address && meta.city_code
+          ? `${meta.address} (${meta.city_code})`
+          : meta.address || existing?.address || meta.city_code || '—';
+
+      byKey.set(key, {
+        id: authUser.id,
+        userId: authUser.id,
+        fullName:
+          existing?.fullName && existing.fullName !== 'Member'
+            ? existing.fullName
+            : meta.full_name || meta.name || email.split('@')[0] || 'CakeZone Member',
+        email: email || existing?.email || '—',
+        phone:
+          existing?.phone && existing.phone !== '—' && existing.phone !== '+91'
+            ? existing.phone
+            : meta.phone && meta.phone !== '+91'
+            ? meta.phone
+            : '—',
+        cityCode: meta.city_code || existing?.cityCode || '',
+        address:
+          existing?.address && existing.address !== '—' ? existing.address : addressVal,
+        coverImage: resolvedCover || existing?.coverImage || '',
+        coverImageName: latestMetaFile?.name || existing?.coverImageName || '',
+        coverStoragePath: storagePath,
+        dietaryNotes:
+          existing?.dietaryNotes && existing.dietaryNotes !== '—'
+            ? existing.dietaryNotes
+            : meta.dietary_notes || '—',
+        savedAt:
+          meta.profile_saved_at ||
+          existing?.savedAt ||
+          authUser.updated_at ||
+          authUser.created_at ||
+          new Date().toISOString(),
+        role: isAdminEmail(email) || existing?.role === 'Admin' ? 'Admin' : 'Customer',
+      });
+    }
+  }
+
+  const unified = Array.from(byKey.values()).sort((a, b) => {
+    const tA = a.savedAt ? new Date(a.savedAt).getTime() : 0;
+    const tB = b.savedAt ? new Date(b.savedAt).getTime() : 0;
+    return tB - tA;
+  });
+
+  writeSharedStore(SHARED_STORE_KEYS.savedProfiles, unified);
+  return { data: unified, error: null };
+};
+
+export const deleteSavedUserProfileFromAdmin = async (
+  profileId: string,
+  email?: string
+): Promise<{ error: any }> => {
+  const deleted = readSharedStore<string[]>(SHARED_STORE_KEYS.deletedSavedProfiles, []);
+  const nextDeleted = new Set(deleted);
+  if (profileId) nextDeleted.add(profileId);
+  if (email && email !== '—') nextDeleted.add(email.trim().toLowerCase());
+  writeSharedStore(SHARED_STORE_KEYS.deletedSavedProfiles, Array.from(nextDeleted));
+
+  const savedProfiles = readSharedStore<SavedUserProfileRecord[]>(
+    SHARED_STORE_KEYS.savedProfiles,
+    []
+  );
+  writeSharedStore(
+    SHARED_STORE_KEYS.savedProfiles,
+    savedProfiles.filter(
+      (p) =>
+        p.id !== profileId &&
+        (!email || p.email.trim().toLowerCase() !== email.trim().toLowerCase())
+    )
+  );
+
+  if (profileId && !profileId.startsWith('profile-')) {
+    await supabase.from('profiles').delete().eq('user_id', profileId);
+  }
+  return { error: null };
 };
 
 export const deleteUserProfile = async () => {
@@ -978,6 +1406,7 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
 };
 
 export const createOrderInDb = async (params: {
+  orderCode?: string;
   customer: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -989,7 +1418,7 @@ export const createOrderInDb = async (params: {
   const userId = session?.user?.id || null;
   if (!userId) return { data: null, error: new Error('Not authenticated') };
 
-  const orderCode = `#CZ-${Math.floor(1000 + Math.random() * 9000)}`;
+  const orderCode = params.orderCode || `#CZ-${Math.floor(1000 + Math.random() * 9000)}`;
   const cakeSummary = params.items
     .map((i) => {
       const fullName = ensureFullCakeTitle(i.name);
@@ -1064,11 +1493,12 @@ export const createOrderInDb = async (params: {
     customerPhone: phoneToStore || '—',
     cakeItem: cakeSummary || 'Artisanal Cake Order',
     cakeTypeDetail: params.items
-      .map(
-        (i) =>
-          `Type: ${i.details || 'Artisanal Patisserie Cake'} · ₹${Number(i.price).toLocaleString(
-            'en-IN'
-          )}`
+      .map((i) =>
+        /custom cake/i.test(i.name) || Number(i.price) === 0
+          ? `Type: ${i.details || 'Custom Cake Design Request'}`
+          : `Type: ${i.details || 'Artisanal Patisserie Cake'} · ₹${Number(i.price).toLocaleString(
+              'en-IN'
+            )}`
       )
       .join(' | '),
     date: nowDate.toLocaleDateString('en-IN', {
@@ -2292,3 +2722,508 @@ export const checkAccountExistsByEmail = async (email: string): Promise<boolean>
 
   return false;
 };
+
+// ============================================================================
+// 8. INSPIRATION GALLERY SECTION CRUD & CAKE IMAGE UPLOAD (`gallery_items` & `gallery_settings`)
+// All rows belong to the authenticated user (`user_id = auth.uid()`) via RLS policies
+// ============================================================================
+
+export const uploadGalleryCakeImage = async (
+  file: File,
+  itemId?: string
+): Promise<{
+  storagePath: string | null;
+  signedUrl: string | null;
+  dataUrlFallback: string;
+  error: any;
+}> => {
+  const dataUrlFallback = await fileToDataUrl(file);
+  const uploadResult = await uploadFileToAppStorage({
+    file,
+    featureName: 'gallery-cakes',
+    itemId: itemId || `gallery-${Date.now()}`,
+  });
+
+  return {
+    storagePath: uploadResult.storagePath,
+    signedUrl: uploadResult.signedUrl || dataUrlFallback || null,
+    dataUrlFallback,
+    error: uploadResult.error,
+  };
+};
+
+const resolveGalleryItemImageSignedUrl = async (item: GalleryItem): Promise<GalleryItem> => {
+  const imageFallbacks = readSharedStore<Record<string, string>>(
+    SHARED_STORE_KEYS.galleryImageFallbacks,
+    {}
+  );
+  const pathCandidate = item.storagePath || (isStorageFilePath(item.image) ? item.image : '');
+  if (pathCandidate && isStorageFilePath(pathCandidate)) {
+    const signedUrl = await createSignedUrlForAppFile(pathCandidate);
+    if (signedUrl) {
+      return {
+        ...item,
+        image: signedUrl,
+        storagePath: pathCandidate,
+      };
+    }
+    if (imageFallbacks[item.id]) {
+      return {
+        ...item,
+        image: imageFallbacks[item.id],
+        storagePath: pathCandidate,
+      };
+    }
+  }
+  if (isStorageFilePath(item.image) && imageFallbacks[item.id]) {
+    return {
+      ...item,
+      image: imageFallbacks[item.id],
+    };
+  }
+  return item;
+};
+
+export const fetchGallerySectionSettings = async (): Promise<GallerySectionSettings> => {
+  const sharedSettings = readSharedStore<GallerySectionSettings | null>(
+    SHARED_STORE_KEYS.gallerySettings,
+    null
+  );
+
+  const userId = await getAuthenticatedUserId();
+  if (userId) {
+    const { data, error } = await supabase
+      .from('gallery_settings')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const resolved: GallerySectionSettings = {
+        heading: data.heading || DEFAULT_GALLERY_SECTION_SETTINGS.heading,
+        subHeading: data.sub_heading || DEFAULT_GALLERY_SECTION_SETTINGS.subHeading,
+        description: data.description || DEFAULT_GALLERY_SECTION_SETTINGS.description,
+      };
+      writeSharedStore(SHARED_STORE_KEYS.gallerySettings, resolved);
+      return resolved;
+    }
+  }
+
+  if (sharedSettings) {
+    return {
+      ...DEFAULT_GALLERY_SECTION_SETTINGS,
+      ...sharedSettings,
+    };
+  }
+
+  return DEFAULT_GALLERY_SECTION_SETTINGS;
+};
+
+export const saveGallerySectionSettings = async (
+  settings: GallerySectionSettings
+): Promise<{ data: GallerySectionSettings; error: any }> => {
+  writeSharedStore(SHARED_STORE_KEYS.gallerySettings, settings);
+
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return { data: settings, error: new Error('Not authenticated') };
+  }
+
+  const { error } = await supabase.from('gallery_settings').upsert(
+    {
+      user_id: userId,
+      heading: settings.heading.trim() || DEFAULT_GALLERY_SECTION_SETTINGS.heading,
+      sub_heading: settings.subHeading.trim() || DEFAULT_GALLERY_SECTION_SETTINGS.subHeading,
+      description: settings.description.trim() || DEFAULT_GALLERY_SECTION_SETTINGS.description,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id' }
+  );
+
+  return { data: settings, error };
+};
+
+export const fetchGalleryItems = async (): Promise<{ data: GalleryItem[]; error: any }> => {
+  const deletedGalleryIds = new Set(
+    readSharedStore<string[]>(SHARED_STORE_KEYS.deletedGalleryItems, [])
+  );
+  const sharedGallery = readSharedStore<GalleryItem[]>(
+    SHARED_STORE_KEYS.galleryItems,
+    []
+  );
+
+  const userId = await getAuthenticatedUserId();
+  let dbRows: any[] | null = null;
+  let dbError: any = null;
+
+  if (userId) {
+    const { data, error } = await supabase
+      .from('gallery_items')
+      .select('*')
+      .eq('user_id', userId)
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: false });
+
+    dbRows = data;
+    dbError = error;
+
+    // Seed initial gallery items for the authenticated user if their `gallery_items` table is empty
+    if (!dbError && (!dbRows || dbRows.length === 0) && sharedGallery.length === 0) {
+      const seedPayload = INITIAL_GALLERY_ITEMS.filter(
+        (item) => !deletedGalleryIds.has(item.id)
+      ).map((item, idx) => ({
+        id: item.id,
+        user_id: userId,
+        title: item.title,
+        sub_heading: item.subHeading || '',
+        description: item.description,
+        item_type: item.category,
+        image_url: item.image,
+        storage_path: null,
+        fallback_image: item.fallbackImage,
+        servings: item.servings,
+        lead_time: item.leadTime,
+        marquee_row: item.rowNumber,
+        display_order: item.displayOrder ?? idx + 1,
+      }));
+
+      if (seedPayload.length > 0) {
+        const { data: seeded } = await supabase
+          .from('gallery_items')
+          .upsert(seedPayload, { onConflict: 'id' })
+          .select('*');
+        if (Array.isArray(seeded) && seeded.length > 0) {
+          dbRows = seeded;
+        }
+      }
+    }
+  }
+
+  const mappedDb: GalleryItem[] = Array.isArray(dbRows)
+    ? dbRows.map((row: any, idx: number) => ({
+        id: String(row.id),
+        userId: row.user_id,
+        category: row.item_type || row.category || 'BESPOKE ROYAL',
+        title: row.title || row.heading || 'Artisanal Creation',
+        subHeading: row.sub_heading || row.signature_notes || '',
+        description: row.description || '',
+        image: row.image_url || row.image || '/assets/aistudio/cake_designer.png',
+        storagePath:
+          row.storage_path ||
+          (isStorageFilePath(row.image_url || row.image)
+            ? row.image_url || row.image
+            : undefined),
+        fallbackImage: row.fallback_image || '/assets/aistudio/cake_designer.png',
+        servings: row.servings || '10 - 14 Servings',
+        leadTime: row.lead_time || '24 Hours Notice',
+        rowNumber: Number(row.marquee_row || row.row_number) === 2 ? 2 : 1,
+        displayOrder: Number(row.display_order ?? idx + 1),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }))
+    : [];
+
+  const byId = new Map<string, GalleryItem>();
+
+  INITIAL_GALLERY_ITEMS.forEach((item) => {
+    if (!deletedGalleryIds.has(item.id)) {
+      byId.set(item.id, item);
+    }
+  });
+
+  sharedGallery.forEach((item) => {
+    if (item?.id && !deletedGalleryIds.has(item.id)) {
+      byId.set(item.id, item);
+    }
+  });
+
+  mappedDb.forEach((item) => {
+    if (item?.id && !deletedGalleryIds.has(item.id)) {
+      const sharedOverride = sharedGallery.find((sg) => sg.id === item.id);
+      byId.set(item.id, sharedOverride ? { ...item, ...sharedOverride } : item);
+    }
+  });
+
+  const mergedList = Array.from(byId.values()).sort(
+    (a, b) => (a.displayOrder ?? 99) - (b.displayOrder ?? 99)
+  );
+  const resolved = await Promise.all(
+    mergedList.map((item) => resolveGalleryItemImageSignedUrl(item))
+  );
+  writeSharedStore(SHARED_STORE_KEYS.galleryItems, resolved);
+
+  return { data: resolved, error: null };
+};
+
+export const createGalleryItemInDb = async (
+  input: {
+    title: string;
+    subHeading?: string;
+    category: string;
+    description: string;
+    imageUrl?: string;
+    fallbackImage?: string;
+    servings?: string;
+    leadTime?: string;
+    rowNumber?: 1 | 2;
+    displayOrder?: number;
+  },
+  imageFile?: File | null
+): Promise<{ data: GalleryItem | null; error: any }> => {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) return { data: null, error: new Error('Not authenticated') };
+
+  const slugId = `insp-${input.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')}-${Date.now().toString().slice(-4)}`;
+
+  let finalImageUrl = input.imageUrl?.trim() || '/assets/aistudio/cake_designer.png';
+  let uploadedStoragePath: string | undefined;
+  let dataUrlFallback = '';
+
+  if (imageFile) {
+    const uploadRes = await uploadGalleryCakeImage(imageFile, slugId);
+    dataUrlFallback = uploadRes.dataUrlFallback;
+    if (uploadRes.storagePath) {
+      uploadedStoragePath = uploadRes.storagePath;
+      finalImageUrl = uploadRes.signedUrl || dataUrlFallback || uploadRes.storagePath;
+    } else if (dataUrlFallback) {
+      finalImageUrl = dataUrlFallback;
+    } else if (uploadRes.error) {
+      return { data: null, error: uploadRes.error };
+    }
+  }
+
+  if (dataUrlFallback) {
+    const imageFallbacks = readSharedStore<Record<string, string>>(
+      SHARED_STORE_KEYS.galleryImageFallbacks,
+      {}
+    );
+    imageFallbacks[slugId] = dataUrlFallback;
+    writeSharedStore(SHARED_STORE_KEYS.galleryImageFallbacks, imageFallbacks);
+  }
+
+  const rowNumber: 1 | 2 = input.rowNumber === 2 ? 2 : 1;
+  const cleanCategory = (input.category || 'BESPOKE ROYAL').trim().toUpperCase();
+
+  const { data: insertedRow } = await supabase
+    .from('gallery_items')
+    .insert({
+      id: slugId,
+      user_id: userId,
+      title: input.title.trim(),
+      sub_heading:
+        input.subHeading?.trim() ||
+        'Artisanal Sponge · Pure French Buttercream · Bespoke Finishing',
+      description: input.description.trim(),
+      item_type: cleanCategory,
+      image_url: uploadedStoragePath || finalImageUrl,
+      storage_path: uploadedStoragePath || null,
+      fallback_image: input.fallbackImage?.trim() || '/assets/aistudio/cake_designer.png',
+      servings: input.servings?.trim() || '10 - 14 Servings',
+      lead_time: input.leadTime?.trim() || '24 Hours Notice',
+      marquee_row: rowNumber,
+      display_order: input.displayOrder ?? 1,
+    })
+    .select('*')
+    .maybeSingle();
+
+  const createdItem: GalleryItem = {
+    id: String(insertedRow?.id || slugId),
+    userId,
+    category: insertedRow?.item_type || cleanCategory,
+    title: insertedRow?.title || input.title.trim(),
+    subHeading:
+      insertedRow?.sub_heading ||
+      input.subHeading?.trim() ||
+      'Artisanal Sponge · Pure French Buttercream · Bespoke Finishing',
+    description: insertedRow?.description || input.description.trim(),
+    image: finalImageUrl,
+    storagePath: uploadedStoragePath,
+    fallbackImage:
+      insertedRow?.fallback_image ||
+      input.fallbackImage?.trim() ||
+      '/assets/aistudio/cake_designer.png',
+    servings: insertedRow?.servings || input.servings?.trim() || '10 - 14 Servings',
+    leadTime: insertedRow?.lead_time || input.leadTime?.trim() || '24 Hours Notice',
+    rowNumber: Number(insertedRow?.marquee_row ?? rowNumber) === 2 ? 2 : 1,
+    displayOrder: Number(insertedRow?.display_order ?? input.displayOrder ?? 1),
+    createdAt: insertedRow?.created_at || new Date().toISOString(),
+  };
+
+  const sharedGallery = readSharedStore<GalleryItem[]>(SHARED_STORE_KEYS.galleryItems, []);
+  writeSharedStore(SHARED_STORE_KEYS.galleryItems, [
+    createdItem,
+    ...sharedGallery.filter((g) => g.id !== createdItem.id),
+  ]);
+
+  return { data: createdItem, error: null };
+};
+
+export const updateGalleryItemInDb = async (
+  itemId: string,
+  updates: Partial<{
+    title: string;
+    subHeading: string;
+    category: string;
+    description: string;
+    imageUrl: string;
+    servings: string;
+    leadTime: string;
+    rowNumber: 1 | 2;
+    displayOrder: number;
+  }>,
+  newImageFile?: File | null
+): Promise<{ data: GalleryItem | null; error: any }> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user?.id || null;
+  if (!userId) return { data: null, error: new Error('Not authenticated') };
+
+  let uploadedStoragePath: string | undefined;
+  let uploadedImageUrl: string | undefined;
+
+  if (newImageFile) {
+    const uploadRes = await uploadGalleryCakeImage(newImageFile, itemId);
+    if (uploadRes.storagePath) {
+      uploadedStoragePath = uploadRes.storagePath;
+      uploadedImageUrl =
+        uploadRes.signedUrl || uploadRes.dataUrlFallback || uploadRes.storagePath;
+    } else if (uploadRes.dataUrlFallback) {
+      uploadedImageUrl = uploadRes.dataUrlFallback;
+    }
+
+    if (uploadRes.dataUrlFallback) {
+      const imageFallbacks = readSharedStore<Record<string, string>>(
+        SHARED_STORE_KEYS.galleryImageFallbacks,
+        {}
+      );
+      imageFallbacks[itemId] = uploadRes.dataUrlFallback;
+      writeSharedStore(SHARED_STORE_KEYS.galleryImageFallbacks, imageFallbacks);
+    }
+  } else if (typeof updates.imageUrl === 'string' && updates.imageUrl.trim()) {
+    uploadedImageUrl = updates.imageUrl.trim();
+  }
+
+  // Update shared store immediately
+  const sharedGallery = readSharedStore<GalleryItem[]>(SHARED_STORE_KEYS.galleryItems, []);
+  let updatedSharedItem: GalleryItem | null = null;
+  const nextShared = sharedGallery.map((g) => {
+    if (g.id === itemId) {
+      updatedSharedItem = {
+        ...g,
+        ...(typeof updates.title === 'string' ? { title: updates.title.trim() } : {}),
+        ...(typeof updates.subHeading === 'string'
+          ? { subHeading: updates.subHeading.trim() }
+          : {}),
+        ...(typeof updates.category === 'string'
+          ? { category: updates.category.trim().toUpperCase() }
+          : {}),
+        ...(typeof updates.description === 'string'
+          ? { description: updates.description.trim() }
+          : {}),
+        ...(uploadedImageUrl ? { image: uploadedImageUrl } : {}),
+        ...(uploadedStoragePath ? { storagePath: uploadedStoragePath } : {}),
+        ...(typeof updates.servings === 'string' ? { servings: updates.servings.trim() } : {}),
+        ...(typeof updates.leadTime === 'string' ? { leadTime: updates.leadTime.trim() } : {}),
+        ...(updates.rowNumber === 1 || updates.rowNumber === 2
+          ? { rowNumber: updates.rowNumber }
+          : {}),
+        ...(typeof updates.displayOrder === 'number'
+          ? { displayOrder: updates.displayOrder }
+          : {}),
+      };
+      return updatedSharedItem;
+    }
+    return g;
+  });
+
+  if (updatedSharedItem) {
+    writeSharedStore(SHARED_STORE_KEYS.galleryItems, nextShared);
+  }
+
+  const payload: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (typeof updates.title === 'string') payload.title = updates.title.trim();
+  if (typeof updates.subHeading === 'string') payload.sub_heading = updates.subHeading.trim();
+  if (typeof updates.category === 'string')
+    payload.item_type = updates.category.trim().toUpperCase();
+  if (typeof updates.description === 'string') payload.description = updates.description.trim();
+  if (uploadedStoragePath) {
+    payload.image_url = uploadedStoragePath;
+    payload.storage_path = uploadedStoragePath;
+  } else if (uploadedImageUrl) {
+    payload.image_url = uploadedImageUrl;
+  }
+  if (typeof updates.servings === 'string') payload.servings = updates.servings.trim();
+  if (typeof updates.leadTime === 'string') payload.lead_time = updates.leadTime.trim();
+  if (updates.rowNumber === 1 || updates.rowNumber === 2) payload.marquee_row = updates.rowNumber;
+  if (typeof updates.displayOrder === 'number') payload.display_order = updates.displayOrder;
+
+  const { data: row, error } = await supabase
+    .from('gallery_items')
+    .update(payload)
+    .eq('id', itemId)
+    .eq('user_id', userId)
+    .select('*')
+    .maybeSingle();
+
+  if (!row) {
+    return {
+      data: updatedSharedItem,
+      error: updatedSharedItem ? null : error,
+    };
+  }
+
+  const mapped: GalleryItem = await resolveGalleryItemImageSignedUrl({
+    id: String(row.id),
+    userId: row.user_id,
+    category: row.item_type || 'BESPOKE ROYAL',
+    title: row.title,
+    subHeading: row.sub_heading || '',
+    description: row.description || '',
+    image: uploadedImageUrl || row.image_url,
+    storagePath: row.storage_path || undefined,
+    fallbackImage: row.fallback_image || '/assets/aistudio/cake_designer.png',
+    servings: row.servings || '10 - 14 Servings',
+    leadTime: row.lead_time || '24 Hours Notice',
+    rowNumber: Number(row.marquee_row) === 2 ? 2 : 1,
+    displayOrder: Number(row.display_order ?? 1),
+    updatedAt: row.updated_at,
+  });
+
+  return { data: mapped, error: null };
+};
+
+export const deleteGalleryItemFromDb = async (
+  itemId: string,
+  storagePath?: string
+): Promise<{ error: any }> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user?.id || null;
+  if (!userId) return { error: new Error('Not authenticated') };
+
+  const deletedIds = readSharedStore<string[]>(SHARED_STORE_KEYS.deletedGalleryItems, []);
+  if (!deletedIds.includes(itemId)) {
+    writeSharedStore(SHARED_STORE_KEYS.deletedGalleryItems, [...deletedIds, itemId]);
+  }
+  const sharedGallery = readSharedStore<GalleryItem[]>(SHARED_STORE_KEYS.galleryItems, []);
+  writeSharedStore(
+    SHARED_STORE_KEYS.galleryItems,
+    sharedGallery.filter((g) => g.id !== itemId)
+  );
+
+  if (storagePath && isStorageFilePath(storagePath)) {
+    await removeFileFromAppStorage(storagePath);
+  }
+
+  const { error } = await supabase
+    .from('gallery_items')
+    .delete()
+    .eq('id', itemId)
+    .eq('user_id', userId);
+
+  return { error };
+};
+

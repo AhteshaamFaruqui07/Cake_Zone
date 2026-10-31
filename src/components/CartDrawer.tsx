@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem } from '../types';
 import { createOrderInDb } from '../services/supabaseData';
-import { LOGO_URL } from '../data/initialData';
+import { LOGO_URL, HERO_CAKE_URL } from '../data/initialData';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -12,10 +12,137 @@ interface CartDrawerProps {
   onClearCart: () => void;
   customerName?: string;
   customerEmail?: string;
+  prefilledPhone?: string;
 }
 
 const WHATSAPP_NUMBER_DISPLAY = '+91 9770566246';
 const WHATSAPP_NUMBER_CLEAN = '919770566246';
+
+const generateOrderCode = () => `#CZ-${Math.floor(1000 + Math.random() * 9000)}`;
+
+const resolveFullNavigableUrl = (candidateUrl?: string, fallbackImageUrl?: string): string => {
+  const trimmed = (candidateUrl || '').trim();
+  const fallback = (fallbackImageUrl || '').trim();
+  const isBrokenTruncated =
+    trimmed.includes('…') ||
+    trimmed.includes('%E2%80%A6') ||
+    trimmed.includes('...');
+
+  if (
+    !isBrokenTruncated &&
+    /^https?:\/\//i.test(trimmed) &&
+    trimmed !== HERO_CAKE_URL
+  ) {
+    return trimmed;
+  }
+
+  if (
+    /^https?:\/\//i.test(fallback) &&
+    !fallback.includes('…') &&
+    fallback !== HERO_CAKE_URL
+  ) {
+    return fallback;
+  }
+
+  return isBrokenTruncated ? '' : trimmed;
+};
+
+const restoreFullUrlsInDetails = (details?: string, fallbackImageUrl?: string): string => {
+  if (!details) return '';
+  const validFallback =
+    fallbackImageUrl &&
+    /^https?:\/\//i.test(fallbackImageUrl) &&
+    !fallbackImageUrl.includes('…') &&
+    fallbackImageUrl !== HERO_CAKE_URL
+      ? fallbackImageUrl.trim()
+      : '';
+
+  if (!validFallback) return details;
+
+  return details.replace(/https?:\/\/[^\s·)]+/gi, (match) => {
+    if (match.includes('…') || match.includes('%E2%80%A6') || match.includes('...')) {
+      return validFallback;
+    }
+    return match;
+  });
+};
+
+const isCustomCakeItem = (item: CartItem): boolean =>
+  Boolean(
+    item.isCustomCake ||
+      item.customCakeData ||
+      /custom cake/i.test(item.name) ||
+      item.id.startsWith('cart-custom-') ||
+      /Client:|Event Date:|Ref:/i.test(item.details || '')
+  );
+
+const parseCustomCakeFields = (
+  item: CartItem,
+  fallbackCustomerName?: string,
+  overridePhone?: string
+) => {
+  const details = restoreFullUrlsInDetails(item.details, item.image);
+  const clientMatch = details.match(/Client:\s*([^·]+)/i);
+  const phoneMatch = details.match(/Phone:\s*([^·]+)/i);
+  const dateMatch = details.match(/Event Date:\s*([^·]+)/i);
+  const notesMatch = details.match(/Notes:\s*([^·]+)/i);
+  const refMatch = details.match(/Ref:\s*([^·]+)/i);
+  const nameParenMatch = item.name.match(/Custom Cake Request\s*\(([^)]+)\)/i);
+
+  const resolvedCustomerName =
+    item.customCakeData?.customerName?.trim() ||
+    clientMatch?.[1]?.trim() ||
+    nameParenMatch?.[1]?.trim() ||
+    fallbackCustomerName?.trim() ||
+    'Customer';
+
+  const resolvedMobileNo =
+    overridePhone?.trim() ||
+    item.customCakeData?.phoneNumber?.trim() ||
+    phoneMatch?.[1]?.trim() ||
+    'Not provided';
+
+  const resolvedEventDate =
+    item.customCakeData?.eventDate?.trim() ||
+    dateMatch?.[1]?.trim() ||
+    'Not specified';
+
+  const resolvedDesignNotes =
+    item.customCakeData?.designNotes?.trim() ||
+    notesMatch?.[1]?.trim() ||
+    'Custom Cake Design';
+
+  let resolvedReferenceImage = 'Not provided';
+  const rawRefUrl = item.customCakeData?.referenceImageUrl?.trim() || '';
+  const rawRefName = item.customCakeData?.referenceImageName?.trim() || '';
+  const navigableUrl = resolveFullNavigableUrl(rawRefUrl, item.image);
+
+  if (navigableUrl) {
+    resolvedReferenceImage = navigableUrl;
+  } else if (refMatch?.[1]?.trim()) {
+    const refCandidate = resolveFullNavigableUrl(refMatch[1].trim(), item.image);
+    resolvedReferenceImage = refCandidate || refMatch[1].trim();
+  } else if (rawRefName) {
+    resolvedReferenceImage = `${rawRefName} (Attached)`;
+  } else if (item.image && item.image.startsWith('data:image/')) {
+    resolvedReferenceImage = 'Uploaded Reference Image (Attached)';
+  }
+
+  const hasCustomImagePreview = Boolean(
+    navigableUrl ||
+      (item.image && item.image !== HERO_CAKE_URL) ||
+      (refMatch?.[1]?.trim() && refMatch[1].trim() !== 'Not provided')
+  );
+
+  return {
+    customerName: resolvedCustomerName,
+    mobileNo: resolvedMobileNo,
+    eventDate: resolvedEventDate,
+    designNotes: resolvedDesignNotes,
+    referenceImage: resolvedReferenceImage,
+    previewImageUrl: hasCustomImagePreview ? item.image : '',
+  };
+};
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   isOpen,
@@ -26,6 +153,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClearCart,
   customerName,
   customerEmail,
+  prefilledPhone,
 }) => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [contactNumber, setContactNumber] = useState('');
@@ -35,6 +163,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [chatDraftMessage, setChatDraftMessage] = useState('');
   const [hasSentWhatsAppMsg, setHasSentWhatsAppMsg] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [pendingOrderCode, setPendingOrderCode] = useState<string>(() => generateOrderCode());
   const [confirmedOrderCode, setConfirmedOrderCode] = useState('#CZ-8493');
   const [confirmedSnapshot, setConfirmedSnapshot] = useState<{
     items: CartItem[];
@@ -42,6 +171,46 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     contactNumber: string;
     whatsappUrl: string;
   } | null>(null);
+
+  // Detect if booking includes a Custom Cake Design request (where phone number was already collected)
+  const hasCustomCakeBooking = items.some(isCustomCakeItem);
+  const allCustomCakeItems = items.length > 0 && items.every(isCustomCakeItem);
+
+  // Extract phone number from the custom cake booking details or prop if present
+  const customBookingPhone = (() => {
+    for (const item of items) {
+      if (item.customCakeData?.phoneNumber?.trim()) {
+        return item.customCakeData.phoneNumber.trim();
+      }
+      const match = item.details?.match(/Phone:\s*([^·]+)/i);
+      if (match?.[1]?.trim()) {
+        return match[1].trim();
+      }
+    }
+    if (prefilledPhone?.trim()) {
+      return prefilledPhone.trim();
+    }
+    return '';
+  })();
+
+  // Automatically autofill contactNumber when a Custom Cake Design phone number is available
+  useEffect(() => {
+    if (!customBookingPhone) return;
+    const digitsOnly = customBookingPhone.replace(/\D/g, '');
+    const normalizedPhone =
+      digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly || customBookingPhone;
+    setContactNumber(normalizedPhone);
+    setContactError('');
+  }, [customBookingPhone]);
+
+  useEffect(() => {
+    if (isOpen && !contactNumber && customBookingPhone) {
+      const digitsOnly = customBookingPhone.replace(/\D/g, '');
+      const normalizedPhone =
+        digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly || customBookingPhone;
+      setContactNumber(normalizedPhone);
+    }
+  }, [isOpen, checkoutStep, contactNumber, customBookingPhone]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -59,13 +228,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce(
+    (sum, item) => (isCustomCakeItem(item) ? sum : sum + item.price * item.quantity),
+    0
+  );
   const packagingFee = 0; // Complimentary luxury packaging
   const deliveryFee = 0; // Free luxury delivery
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax + packagingFee + deliveryFee;
 
-  const isContactValid = /^\d{10}$/.test(contactNumber);
+  const effectivePhone = contactNumber.trim() || customBookingPhone;
+  const isContactValid =
+    /^\d{10}$/.test(contactNumber.trim()) ||
+    (hasCustomCakeBooking && contactNumber.trim().replace(/\D/g, '').length >= 7);
 
   const buildWhatsAppMessage = (
     orderItems: CartItem[],
@@ -73,16 +248,63 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     phone: string,
     code?: string
   ) => {
+    const activeOrderId = code || pendingOrderCode;
+    const customItems = orderItems.filter(isCustomCakeItem);
+    const regularItems = orderItems.filter((item) => !isCustomCakeItem(item));
+
+    // When ordering Custom Cake Design only: never display any amount/price, and include exact required fields
+    if (customItems.length > 0 && regularItems.length === 0) {
+      const lines: string[] = [
+        'Hello CakeZone! I would like to place a Custom Cake Design order:',
+        '',
+      ];
+
+      customItems.forEach((item, idx) => {
+        const info = parseCustomCakeFields(item, customerName, phone);
+        if (customItems.length > 1) {
+          lines.push(`--- Custom Cake #${idx + 1} ---`);
+        }
+        lines.push(`Order ID: ${activeOrderId}`);
+        lines.push(`Name of customer: ${info.customerName}`);
+        lines.push(`Mobile no: ${info.mobileNo}`);
+        lines.push(`Event date: ${info.eventDate}`);
+        lines.push(
+          `Design Notes or theme: ${info.designNotes}${
+            specialInstructions.trim() ? ` | ${specialInstructions.trim()}` : ''
+          }`
+        );
+        lines.push(`Reference image of the cake: ${info.referenceImage}`);
+        lines.push('');
+      });
+
+      lines.push('Please confirm my custom cake design order. Thank you!');
+      return lines.join('\n');
+    }
+
     const lines: string[] = [
-      `Hello CakeZone! I would like to place a bespoke cake order${code ? ` (${code})` : ''}:`,
+      `Hello CakeZone! I would like to place a bespoke cake order (${activeOrderId}):`,
       '',
     ];
 
-    orderItems.forEach((item, index) => {
+    if (customItems.length > 0) {
+      customItems.forEach((item, idx) => {
+        const info = parseCustomCakeFields(item, customerName, phone);
+        lines.push(`Custom Cake Design Request${customItems.length > 1 ? ` #${idx + 1}` : ''}:`);
+        lines.push(`Order ID: ${activeOrderId}`);
+        lines.push(`Name of customer: ${info.customerName}`);
+        lines.push(`Mobile no: ${info.mobileNo}`);
+        lines.push(`Event date: ${info.eventDate}`);
+        lines.push(`Design Notes or theme: ${info.designNotes}`);
+        lines.push(`Reference image of the cake: ${info.referenceImage}`);
+        lines.push('');
+      });
+    }
+
+    regularItems.forEach((item, index) => {
       lines.push(`${index + 1}. Item Name: ${item.name}`);
       lines.push(`   Quantity: ${item.quantity}`);
       if (item.details) {
-        lines.push(`   Details: ${item.details}`);
+        lines.push(`   Details: ${restoreFullUrlsInDetails(item.details, item.image)}`);
       }
       lines.push(`   Price: ₹${(item.price * item.quantity).toLocaleString('en-IN')}`);
       lines.push('');
@@ -93,7 +315,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       lines.push('');
     }
 
-    lines.push(`Total Amount (incl. GST): ₹${orderTotal.toLocaleString('en-IN')}`);
+    if (regularItems.length > 0) {
+      lines.push(`Total Amount (incl. GST): ₹${orderTotal.toLocaleString('en-IN')}`);
+    }
     if (customerName) {
       lines.push(`Customer Name: ${customerName}`);
     }
@@ -109,26 +333,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     return lines.join('\n');
   };
 
-  const whatsappMessage = buildWhatsAppMessage(items, total, contactNumber);
+  const whatsappMessage = buildWhatsAppMessage(items, total, effectivePhone, pendingOrderCode);
+
+  const customCakeReferencePreviews = items
+    .filter(isCustomCakeItem)
+    .map((item) => parseCustomCakeFields(item, customerName, effectivePhone))
+    .filter((info) => Boolean(info.previewImageUrl));
 
   // Step 1 -> Step 2: Proceed to Bespoke Checkout
   const handleProceedToBespokeCheckout = () => {
     setContactError('');
+    if (!contactNumber && customBookingPhone) {
+      const digitsOnly = customBookingPhone.replace(/\D/g, '');
+      const normalizedPhone =
+        digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly || customBookingPhone;
+      setContactNumber(normalizedPhone);
+    }
     setCheckoutStep('whatsapp');
   };
 
-  // Step 2 -> Open Small WhatsApp Window (after validating mandatory contact number)
+  // Step 2 -> Open Small WhatsApp Window (after checking autofilled or entered contact number)
   const handleOpenWhatsAppWindow = () => {
     if (!contactNumber.trim()) {
       setContactError('Contact number is mandatory to proceed with your bespoke order.');
       return;
     }
     if (!isContactValid) {
-      setContactError('Please enter a valid 10-digit mobile contact number (digits only, no special characters).');
+      setContactError(
+        'Please enter a valid 10-digit mobile contact number (digits only, no special characters).'
+      );
       return;
     }
     setContactError('');
-    const prefilled = buildWhatsAppMessage(items, total, contactNumber);
+    const prefilled = buildWhatsAppMessage(items, total, effectivePhone, pendingOrderCode);
     setChatDraftMessage(prefilled);
     setHasSentWhatsAppMsg(false);
     setIsWhatsAppPopupOpen(true);
@@ -140,20 +377,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     const snapshotItems = [...items];
     const snapshotTotal = total;
-    const snapshotPhone = contactNumber.trim();
+    const snapshotPhone = effectivePhone;
+    const targetOrderCode = pendingOrderCode;
     setIsCheckingOut(true);
     setHasSentWhatsAppMsg(true);
 
     try {
+      const customCustomerName = snapshotItems.some(isCustomCakeItem)
+        ? parseCustomCakeFields(
+            snapshotItems.find(isCustomCakeItem)!,
+            customerName,
+            snapshotPhone
+          ).customerName
+        : customerName || 'Customer';
+
       const { orderCode } = await createOrderInDb({
-        customer: customerName || 'Customer',
+        orderCode: targetOrderCode,
+        customer: customCustomerName || customerName || 'Customer',
         customerEmail: customerEmail || '',
         customerPhone: snapshotPhone,
         items: snapshotItems,
         specialInstructions,
         amount: snapshotTotal,
       });
-      const finalCode = orderCode || `#CZ-${Math.floor(1000 + Math.random() * 9000)}`;
+      const finalCode = orderCode || targetOrderCode;
       setConfirmedOrderCode(finalCode);
 
       const finalMsg =
@@ -172,6 +419,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
       setIsWhatsAppPopupOpen(false);
       setCheckoutStep('confirmed');
+      setPendingOrderCode(generateOrderCode());
       onClearCart();
     } finally {
       setIsCheckingOut(false);
@@ -183,9 +431,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setConfirmedSnapshot(null);
     setSpecialInstructions('');
     setContactError('');
+    setPendingOrderCode(generateOrderCode());
     onClearCart();
     onClose();
   };
+
+  const confirmedItemsList = confirmedSnapshot?.items || items;
+  const confirmedAllCustomCake =
+    confirmedItemsList.length > 0 && confirmedItemsList.every(isCustomCakeItem);
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -283,7 +536,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     Confirmed Items Summary:
                   </p>
                   <div className="space-y-2 divide-y divide-outline-variant/30">
-                    {(confirmedSnapshot?.items || items).map((item) => (
+                    {confirmedItemsList.map((item) => (
                       <div key={item.id} className="pt-2 first:pt-0 flex justify-between items-start gap-2">
                         <div>
                           <p className="font-bold text-on-surface">{item.name}</p>
@@ -291,27 +544,33 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             Quantity: <span className="font-bold text-on-surface">{item.quantity}</span>
                           </p>
                         </div>
-                        <span className="font-bold text-primary tabular-nums">
-                          ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                        </span>
+                        {!isCustomCakeItem(item) && (
+                          <span className="font-bold text-primary tabular-nums">
+                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
                   <div className="pt-2 border-t border-outline-variant/40 space-y-1">
-                    <p>
-                      Customer Contact:{' '}
-                      <span className="font-semibold text-on-surface">
-                        {confirmedSnapshot?.contactNumber || contactNumber}
-                      </span>
-                    </p>
+                    {(confirmedSnapshot?.contactNumber || effectivePhone) && (
+                      <p>
+                        Customer Contact:{' '}
+                        <span className="font-semibold text-on-surface">
+                          {confirmedSnapshot?.contactNumber || effectivePhone}
+                        </span>
+                      </p>
+                    )}
                     <p>
                       WhatsApp Concierge:{' '}
                       <span className="font-semibold text-on-surface">{WHATSAPP_NUMBER_DISPLAY}</span>
                     </p>
                     <p>Estimated Delivery: Tomorrow by 2:00 PM</p>
-                    <p className="font-bold text-primary text-sm pt-1">
-                      Total Order Amount: ₹{(confirmedSnapshot?.total ?? total).toLocaleString('en-IN')}
-                    </p>
+                    {!confirmedAllCustomCake && (
+                      <p className="font-bold text-primary text-sm pt-1">
+                        Total Order Amount: ₹{(confirmedSnapshot?.total ?? total).toLocaleString('en-IN')}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -333,23 +592,44 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <span className="text-xs font-bold text-[#128C7E]">{WHATSAPP_NUMBER_DISPLAY}</span>
                   </div>
                   <h3 className="text-base font-bold text-on-surface font-headline">
-                    Enter Contact & Place Order via WhatsApp
+                    {hasCustomCakeBooking
+                      ? 'Verify Contact & Place Order via WhatsApp'
+                      : 'Enter Contact & Place Order via WhatsApp'}
                   </h3>
                   <p className="text-xs text-on-surface-variant leading-relaxed">
-                    Add your mandatory contact number below, then click <strong>Place Order via WhatsApp</strong> to open the WhatsApp chat window and send your pre-typed order.
+                    {hasCustomCakeBooking ? (
+                      <>
+                        Your mobile number from the custom cake request is autofilled below. Verify
+                        your number, then click <strong>Place Order via WhatsApp</strong> to send
+                        your pre-typed order.
+                      </>
+                    ) : (
+                      <>
+                        Add your mandatory contact number below, then click{' '}
+                        <strong>Place Order via WhatsApp</strong> to open the WhatsApp chat window
+                        and send your pre-typed order.
+                      </>
+                    )}
                   </p>
                 </div>
 
-                {/* Mandatory Contact Number Input */}
+                {/* Contact Number Input (Autofilled for Custom Cake Design bookings, editable to review/update) */}
                 <div className="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/60 space-y-2">
                   <label className="flex items-center justify-between text-xs font-bold text-on-surface uppercase tracking-wider">
                     <span className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-sm text-primary">call</span>
                       Contact Number <span className="text-error">*</span>
                     </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                      Mandatory
-                    </span>
+                    {hasCustomCakeBooking && contactNumber ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">check_circle</span>
+                        Autofilled
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        Mandatory
+                      </span>
+                    )}
                   </label>
                   <input
                     type="tel"
@@ -376,6 +656,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <p className="text-[11px] font-semibold text-error flex items-center gap-1">
                       <span className="material-symbols-outlined text-sm">error</span>
                       {contactError}
+                    </p>
+                  ) : hasCustomCakeBooking && contactNumber ? (
+                    <p className="text-[11px] text-emerald-700 font-medium">
+                      Autofilled from your Custom Cake Design booking. You can verify or edit your number above.
                     </p>
                   ) : (
                     <p className="text-[11px] text-on-surface-variant">
@@ -408,14 +692,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             </p>
                             {item.details && (
                               <p className="text-[10px] text-on-surface-variant truncate">
-                                {item.details}
+                                {restoreFullUrlsInDetails(item.details, item.image)}
                               </p>
                             )}
                           </div>
                         </div>
-                        <span className="text-xs font-bold text-on-surface tabular-nums shrink-0">
-                          ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                        </span>
+                        {!isCustomCakeItem(item) && (
+                          <span className="text-xs font-bold text-on-surface tabular-nums shrink-0">
+                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -432,8 +718,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </span>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-[#efeae2] border border-outline-variant/50 shadow-inner">
-                    <div className="bg-white rounded-xl p-3 shadow-xs text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
-                      {whatsappMessage}
+                    <div className="bg-white rounded-xl p-3 shadow-xs text-xs text-slate-800 space-y-2.5">
+                      <div className="whitespace-pre-wrap font-sans leading-relaxed break-words">
+                        {whatsappMessage}
+                      </div>
+                      {customCakeReferencePreviews.length > 0 && (
+                        <div className="pt-2 border-t border-slate-100 flex items-center gap-2.5">
+                          <img
+                            src={customCakeReferencePreviews[0].previewImageUrl}
+                            alt="Cake Reference"
+                            className="w-14 h-14 rounded-lg object-cover border border-slate-200 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold text-[#075E54] uppercase tracking-wider">
+                              Reference Image of the Cake
+                            </p>
+                            <p className="text-[11px] text-slate-600 truncate">
+                              {customCakeReferencePreviews[0].referenceImage}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -467,47 +772,32 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         alt={item.name}
                         className="w-20 h-20 rounded-lg object-cover bg-surface-container shrink-0"
                       />
-                      <div className="flex-1 flex flex-col justify-between">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-bold text-sm text-on-surface">{item.name}</h4>
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-sm text-on-surface truncate">{item.name}</h4>
                             {item.details && (
-                              <p className="text-[11px] text-on-surface-variant line-clamp-1 mt-0.5">
-                                {item.details}
+                              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                                {restoreFullUrlsInDetails(item.details, item.image)}
                               </p>
                             )}
                           </div>
                           <button
                             onClick={() => onRemoveItem(item.id)}
-                            className="text-outline hover:text-error text-xs p-1 cursor-pointer"
+                            className="text-outline hover:text-error text-xs p-1 cursor-pointer shrink-0"
                             title="Remove item"
                           >
                             <span className="material-symbols-outlined text-base">delete</span>
                           </button>
                         </div>
 
-                        <div className="flex justify-between items-center mt-2">
-                          <div className="flex items-center border border-outline-variant rounded-lg bg-surface">
-                            <button
-                              onClick={() => onUpdateQuantity(item.id, -1)}
-                              className="px-2 py-0.5 text-on-surface hover:bg-surface-container text-xs font-bold rounded-l cursor-pointer"
-                            >
-                              -
-                            </button>
-                            <span className="px-2.5 py-0.5 text-xs font-bold text-on-surface tabular-nums">
-                              {item.quantity}
+                        {!isCustomCakeItem(item) && (
+                          <div className="flex justify-end items-center mt-2">
+                            <span className="font-bold text-sm text-primary tabular-nums">
+                              ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                             </span>
-                            <button
-                              onClick={() => onUpdateQuantity(item.id, 1)}
-                              className="px-2 py-0.5 text-on-surface hover:bg-surface-container text-xs font-bold rounded-r cursor-pointer"
-                            >
-                              +
-                            </button>
                           </div>
-                          <span className="font-bold text-sm text-primary tabular-nums">
-                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                          </span>
-                        </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -533,32 +823,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* Drawer Footer */}
           {checkoutStep === 'bag' && items.length > 0 && (
             <div className="p-5 sm:p-6 bg-surface-container border-t border-outline-variant/40 space-y-4">
-              <div className="space-y-2 text-xs text-on-surface-variant">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span className="font-semibold text-on-surface tabular-nums">
-                    ₹{subtotal.toLocaleString('en-IN')}
-                  </span>
+              {!allCustomCakeItems && (
+                <div className="space-y-2 text-xs text-on-surface-variant">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span className="font-semibold text-on-surface tabular-nums">
+                      ₹{subtotal.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Luxury Gold-Foil Packaging</span>
+                    <span className="font-semibold text-emerald-600">Complimentary</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Metropolitan Chilled Courier</span>
+                    <span className="font-semibold text-emerald-600">Free</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Estimated Tax (GST 5%)</span>
+                    <span className="font-semibold text-on-surface tabular-nums">
+                      ₹{tax.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-base font-black text-on-surface pt-2 border-t border-outline-variant/30">
+                    <span>Total</span>
+                    <span className="text-primary tabular-nums">₹{total.toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Luxury Gold-Foil Packaging</span>
-                  <span className="font-semibold text-emerald-600">Complimentary</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Metropolitan Chilled Courier</span>
-                  <span className="font-semibold text-emerald-600">Free</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Estimated Tax (GST 5%)</span>
-                  <span className="font-semibold text-on-surface tabular-nums">
-                    ₹{tax.toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="flex justify-between text-base font-black text-on-surface pt-2 border-t border-outline-variant/30">
-                  <span>Total</span>
-                  <span className="text-primary tabular-nums">₹{total.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
+              )}
 
               <button
                 type="button"
@@ -573,12 +865,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {checkoutStep === 'whatsapp' && items.length > 0 && (
             <div className="p-5 sm:p-6 bg-surface-container border-t border-outline-variant/40 space-y-3">
-              <div className="flex justify-between items-center text-sm font-black text-on-surface">
-                <span>Total Payable</span>
-                <span className="text-primary tabular-nums text-base">
-                  ₹{total.toLocaleString('en-IN')}
-                </span>
-              </div>
+              {!allCustomCakeItems && (
+                <div className="flex justify-between items-center text-sm font-black text-on-surface">
+                  <span>Total Payable</span>
+                  <span className="text-primary tabular-nums text-base">
+                    ₹{total.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -647,7 +941,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <div className="bg-white text-slate-800 p-2.5 rounded-xl rounded-tl-none shadow-xs max-w-[88%] space-y-1">
                     <p className="font-bold text-[11px] text-[#075E54]">CakeZone</p>
                     <p className="leading-relaxed text-[11px]">
-                      Welcome! Your bespoke cake order & contact number ({contactNumber}) are pre-typed below. Simply press <strong>Send</strong> to confirm! 🎂
+                      {hasCustomCakeBooking ? (
+                        <>
+                          Welcome! Your custom cake design request is pre-typed below. Simply press{' '}
+                          <strong>Send</strong> to confirm! 🎂
+                        </>
+                      ) : (
+                        <>
+                          Welcome! Your bespoke cake order & contact number ({effectivePhone}) are
+                          pre-typed below. Simply press <strong>Send</strong> to confirm! 🎂
+                        </>
+                      )}
                     </p>
                   </div>
 
@@ -655,6 +959,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   {hasSentWhatsAppMsg && (
                     <>
                       <div className="bg-[#dcf8c6] text-slate-900 p-2.5 rounded-xl rounded-tr-none shadow-xs ml-auto max-w-[90%] whitespace-pre-wrap text-[11px] leading-relaxed">
+                        {customCakeReferencePreviews.length > 0 && (
+                          <img
+                            src={customCakeReferencePreviews[0].previewImageUrl}
+                            alt="Cake Reference"
+                            className="w-full max-h-28 object-cover rounded-lg mb-2 border border-emerald-200"
+                          />
+                        )}
                         {chatDraftMessage}
                         <div className="text-[9px] text-slate-500 text-right mt-1 flex items-center justify-end gap-1">
                           <span>Just now</span>
@@ -678,8 +989,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <p className="text-[10px] font-bold text-[#128C7E] uppercase tracking-wider mb-1">
                         Auto-Typed Order Message
                       </p>
+                      {customCakeReferencePreviews.length > 0 && (
+                        <div className="flex items-center gap-2 mb-1.5 pb-1.5 border-b border-slate-100">
+                          <img
+                            src={customCakeReferencePreviews[0].previewImageUrl}
+                            alt="Cake Reference"
+                            className="w-9 h-9 rounded-md object-cover border border-slate-200 shrink-0"
+                          />
+                          <span className="text-[10px] text-slate-600 font-medium truncate">
+                            Reference image attached
+                          </span>
+                        </div>
+                      )}
                       <textarea
-                        rows={4}
+                        rows={5}
                         value={chatDraftMessage}
                         onChange={(e) => setChatDraftMessage(e.target.value)}
                         disabled={hasSentWhatsAppMsg}

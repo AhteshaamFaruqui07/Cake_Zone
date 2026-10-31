@@ -1,27 +1,39 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Order,
-  LowStockItem,
   OrderStatus,
   ScreenType,
   CakeProduct,
   LoggedInUserRecord,
   CustomCakeBuilderSettings,
+  GalleryItem,
+  GallerySectionSettings,
+  SavedUserProfileRecord,
 } from '../types';
-import { SIGNATURE_CAKES } from '../data/initialData';
+import {
+  SIGNATURE_CAKES,
+  INITIAL_GALLERY_ITEMS,
+  DEFAULT_GALLERY_SECTION_SETTINGS,
+} from '../data/initialData';
 import { supabase } from '../supabaseClient';
 import {
   fetchOrders,
   updateOrderStatusInDb,
   deleteOrderFromDb,
-  fetchInventoryItems,
-  updateInventoryItemInDb,
   resolveIsAdminFromSupabase,
   fetchAllLoggedInUsersFromSupabase,
+  fetchSavedUserProfilesFromSupabase,
+  deleteSavedUserProfileFromAdmin,
   fetchCakeProducts,
   insertCakeProductInDb,
   updateCakeProductInDb,
   deleteCakeProductFromDb,
+  fetchGalleryItems,
+  createGalleryItemInDb,
+  updateGalleryItemInDb,
+  deleteGalleryItemFromDb,
+  fetchGallerySectionSettings,
+  saveGallerySectionSettings,
   fetchCustomCakeSettings,
   saveCustomCakeSettings,
   DEFAULT_CUSTOM_CAKE_SETTINGS,
@@ -41,6 +53,10 @@ interface AdminDashboardProps {
   onLogout?: () => void;
   cakes?: CakeProduct[];
   onCakesChange?: (cakes: CakeProduct[]) => void;
+  galleryItems?: GalleryItem[];
+  onGalleryItemsChange?: (items: GalleryItem[]) => void;
+  gallerySettings?: GallerySectionSettings;
+  onGallerySettingsChange?: (settings: GallerySectionSettings) => void;
   customCakeSettings?: CustomCakeBuilderSettings;
   onCustomCakeSettingsChange?: (settings: CustomCakeBuilderSettings) => void;
 }
@@ -51,11 +67,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onLogout,
   cakes: propCakes,
   onCakesChange,
+  galleryItems: propGalleryItems,
+  onGalleryItemsChange,
+  gallerySettings: propGallerySettings,
+  onGallerySettingsChange,
   customCakeSettings: propCustomSettings,
   onCustomCakeSettingsChange,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'Dashboard' | 'Orders' | 'Products' | 'Customers' | 'CustomCake' | 'Settings'
+    'Dashboard' | 'Orders' | 'Products' | 'Gallery' | 'Customers' | 'Settings'
   >('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All Statuses');
@@ -65,7 +85,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [catalogCakes, setCatalogCakes] = useState<CakeProduct[]>(
     propCakes && propCakes.length > 0 ? propCakes : SIGNATURE_CAKES
   );
-  const [stockItems, setStockItems] = useState<LowStockItem[]>([]);
+  const [galleryList, setGalleryList] = useState<GalleryItem[]>(
+    propGalleryItems && propGalleryItems.length > 0 ? propGalleryItems : INITIAL_GALLERY_ITEMS
+  );
+  const [galleryHeader, setGalleryHeader] = useState<GallerySectionSettings>(
+    propGallerySettings || DEFAULT_GALLERY_SECTION_SETTINGS
+  );
+  const [savedProfiles, setSavedProfiles] = useState<SavedUserProfileRecord[]>([]);
   const [customCakesList, setCustomCakesList] = useState<CustomCakeRecord[]>([]);
   const [builderSettings, setBuilderSettings] = useState<CustomCakeBuilderSettings>(
     propCustomSettings || DEFAULT_CUSTOM_CAKE_SETTINGS
@@ -98,6 +124,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     rating: number;
     description: string;
   }>({ name: '', caption: '', price: 899, rating: 4.8, description: '' });
+
+  // Inspiration Gallery Admin State (Create, Upload Cake Image, Update, Delete)
+  const [isSavingGalleryHeader, setIsSavingGalleryHeader] = useState(false);
+  const [newGalleryTitle, setNewGalleryTitle] = useState('');
+  const [newGallerySubHeading, setNewGallerySubHeading] = useState('');
+  const [newGalleryCategory, setNewGalleryCategory] = useState('BESPOKE ROYAL');
+  const [newGalleryDescription, setNewGalleryDescription] = useState('');
+  const [newGalleryServings, setNewGalleryServings] = useState('10 - 14 Servings');
+  const [newGalleryLeadTime, setNewGalleryLeadTime] = useState('24 Hours Notice');
+  const [newGalleryRow, setNewGalleryRow] = useState<1 | 2>(1);
+  const [newGalleryImageUrl, setNewGalleryImageUrl] = useState('');
+  const [newGalleryImageFile, setNewGalleryImageFile] = useState<File | null>(null);
+  const [newGalleryImagePreview, setNewGalleryImagePreview] = useState('');
+  const [isInsertingGalleryItem, setIsInsertingGalleryItem] = useState(false);
+  const [editingGalleryId, setEditingGalleryId] = useState<string | null>(null);
+  const [editingGalleryDraft, setEditingGalleryDraft] = useState<{
+    title: string;
+    subHeading: string;
+    category: string;
+    description: string;
+    imageUrl: string;
+    servings: string;
+    leadTime: string;
+    rowNumber: 1 | 2;
+  }>({
+    title: '',
+    subHeading: '',
+    category: 'BESPOKE ROYAL',
+    description: '',
+    imageUrl: '',
+    servings: '10 - 14 Servings',
+    leadTime: '24 Hours Notice',
+    rowNumber: 1,
+  });
+  const [editingGalleryFile, setEditingGalleryFile] = useState<File | null>(null);
+  const [editingGalleryPreview, setEditingGalleryPreview] = useState('');
+  const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null);
 
   // Custom Cake Builder Editor State
   const [newFlavorInput, setNewFlavorInput] = useState('');
@@ -132,6 +195,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [propCakes]);
 
   useEffect(() => {
+    if (propGalleryItems && propGalleryItems.length > 0) {
+      setGalleryList(propGalleryItems);
+    }
+  }, [propGalleryItems]);
+
+  useEffect(() => {
+    if (propGallerySettings) {
+      setGalleryHeader(propGallerySettings);
+    }
+  }, [propGallerySettings]);
+
+  useEffect(() => {
     if (propCustomSettings) {
       setBuilderSettings(propCustomSettings);
     }
@@ -143,15 +218,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const [
         ordersRes,
         usersRes,
+        savedProfilesRes,
         productsRes,
-        inventoryRes,
+        galleryRes,
+        loadedGalleryHeader,
         customCakesRes,
         loadedSettings,
       ] = await Promise.all([
         fetchOrders(),
         fetchAllLoggedInUsersFromSupabase(),
+        fetchSavedUserProfilesFromSupabase(),
         fetchCakeProducts(),
-        fetchInventoryItems(),
+        fetchGalleryItems(),
+        fetchGallerySectionSettings(),
         fetchCustomCakes(),
         fetchCustomCakeSettings(),
       ]);
@@ -165,13 +244,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setLoggedInUsers(usersRes.data);
       }
 
+      if (savedProfilesRes.data) {
+        setSavedProfiles(savedProfilesRes.data);
+      }
+
       if (productsRes.data && productsRes.data.length > 0) {
         setCatalogCakes(productsRes.data);
         onCakesChange?.(productsRes.data);
       }
 
-      if (inventoryRes.data) {
-        setStockItems(inventoryRes.data);
+      if (galleryRes.data && galleryRes.data.length > 0) {
+        setGalleryList(galleryRes.data);
+        onGalleryItemsChange?.(galleryRes.data);
+      }
+
+      if (loadedGalleryHeader) {
+        setGalleryHeader(loadedGalleryHeader);
+        onGallerySettingsChange?.(loadedGalleryHeader);
       }
 
       if (customCakesRes.data) {
@@ -260,6 +349,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         u.role.toLowerCase().includes(q)
     );
   }, [loggedInUsers, searchQuery]);
+
+  // Filtered saved user profiles
+  const filteredSavedProfiles = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return savedProfiles;
+    return savedProfiles.filter(
+      (p) =>
+        p.fullName.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        p.phone.toLowerCase().includes(q) ||
+        p.address.toLowerCase().includes(q) ||
+        p.dietaryNotes.toLowerCase().includes(q)
+    );
+  }, [savedProfiles, searchQuery]);
 
   // ==========================================================================
   // HANDLERS: ADMIN ROLE MANAGEMENT
@@ -496,6 +599,125 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // ==========================================================================
+  // HANDLERS: INSPIRATION GALLERY CRUD & CAKE IMAGE UPLOAD
+  // ==========================================================================
+  const handleSaveGalleryHeaderAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingGalleryHeader(true);
+    try {
+      const { data, error } = await saveGallerySectionSettings(galleryHeader);
+      if (error) {
+        showFeedback(`Error saving gallery header: ${error.message || 'Failed'}`);
+        return;
+      }
+      setGalleryHeader(data);
+      onGallerySettingsChange?.(data);
+      showFeedback('Gallery section heading, sub-heading & description saved to Supabase!');
+    } finally {
+      setIsSavingGalleryHeader(false);
+    }
+  };
+
+  const handleGalleryImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNewGalleryImageFile(file);
+    setNewGalleryImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleInsertGalleryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGalleryTitle.trim() || !newGalleryDescription.trim()) {
+      showFeedback('Please enter a gallery item heading and description.');
+      return;
+    }
+    setIsInsertingGalleryItem(true);
+    try {
+      const { data: created, error } = await createGalleryItemInDb(
+        {
+          title: newGalleryTitle,
+          subHeading: newGallerySubHeading,
+          category: newGalleryCategory,
+          description: newGalleryDescription,
+          imageUrl: newGalleryImageUrl,
+          servings: newGalleryServings,
+          leadTime: newGalleryLeadTime,
+          rowNumber: newGalleryRow,
+          displayOrder: galleryList.length + 1,
+        },
+        newGalleryImageFile
+      );
+
+      if (error || !created) {
+        showFeedback(`Error creating gallery item: ${error?.message || 'Could not insert'}`);
+        return;
+      }
+
+      const nextList = [created, ...galleryList.filter((g) => g.id !== created.id)];
+      setGalleryList(nextList);
+      onGalleryItemsChange?.(nextList);
+
+      setNewGalleryTitle('');
+      setNewGallerySubHeading('');
+      setNewGalleryDescription('');
+      setNewGalleryImageUrl('');
+      setNewGalleryImageFile(null);
+      setNewGalleryImagePreview('');
+      showFeedback(`"${created.title}" added to Inspiration Gallery in Supabase!`);
+    } finally {
+      setIsInsertingGalleryItem(false);
+    }
+  };
+
+  const handleStartEditGalleryItem = (item: GalleryItem) => {
+    setEditingGalleryId(item.id);
+    setEditingGalleryDraft({
+      title: item.title,
+      subHeading: item.subHeading || '',
+      category: item.category,
+      description: item.description,
+      imageUrl: item.image,
+      servings: item.servings,
+      leadTime: item.leadTime,
+      rowNumber: item.rowNumber,
+    });
+    setEditingGalleryFile(null);
+    setEditingGalleryPreview('');
+  };
+
+  const handleSaveUpdateGalleryItem = async (itemId: string) => {
+    const { data: updated, error } = await updateGalleryItemInDb(
+      itemId,
+      editingGalleryDraft,
+      editingGalleryFile
+    );
+    if (error || !updated) {
+      showFeedback(`Error updating gallery item: ${error?.message || 'Failed'}`);
+      return;
+    }
+    const nextList = galleryList.map((g) => (g.id === itemId ? updated : g));
+    setGalleryList(nextList);
+    onGalleryItemsChange?.(nextList);
+    setEditingGalleryId(null);
+    setEditingGalleryFile(null);
+    setEditingGalleryPreview('');
+    showFeedback(`Gallery item "${updated.title}" updated in Supabase!`);
+  };
+
+  const handleDeleteGalleryItem = async (item: GalleryItem) => {
+    setDeletingGalleryId(item.id);
+    try {
+      await deleteGalleryItemFromDb(item.id, item.storagePath);
+      const nextList = galleryList.filter((g) => g.id !== item.id);
+      setGalleryList(nextList);
+      onGalleryItemsChange?.(nextList);
+      showFeedback(`"${item.title}" deleted from Supabase gallery & storage.`);
+    } finally {
+      setDeletingGalleryId(null);
+    }
+  };
+
+  // ==========================================================================
   // HANDLERS: DESIGN CUSTOM CAKE DATA & PRICE UPDATES
   // ==========================================================================
   const handleTierChange = (
@@ -560,29 +782,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showFeedback('Custom cake record deleted from Supabase.');
   };
 
-  const handleRestock = async (id: string) => {
-    let targetRestocked = false;
-    let targetRemaining = '';
-
-    setStockItems((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          targetRestocked = !item.isRestocked;
-          targetRemaining = targetRestocked ? 'Restocked (Healthy stock)' : item.remaining;
-          return {
-            ...item,
-            isRestocked: targetRestocked,
-            remaining: targetRemaining,
-          };
-        }
-        return item;
-      })
-    );
-
-    await updateInventoryItemInDb(id, {
-      isRestocked: targetRestocked,
-      remaining: targetRemaining,
-    });
+  const handleDeleteSavedProfile = async (profile: SavedUserProfileRecord) => {
+    await deleteSavedUserProfileFromAdmin(profile.id, profile.email);
+    setSavedProfiles((prev) => prev.filter((p) => p.id !== profile.id));
+    showFeedback(`Removed saved profile record for ${profile.fullName}.`);
   };
 
   return (
@@ -765,6 +968,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             </button>
             <button
+              onClick={() => setActiveTab('Gallery')}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl font-medium text-sm transition-colors cursor-pointer ${
+                activeTab === 'Gallery'
+                  ? 'bg-primary-container text-on-primary-container font-bold shadow-xs'
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-lg">collections</span>
+                <span>Inspiration Gallery</span>
+              </div>
+              <span className="px-2 py-0.5 text-[11px] rounded-full bg-surface text-primary font-bold">
+                {galleryList.length}
+              </span>
+            </button>
+            <button
               onClick={() => setActiveTab('Orders')}
               className={`flex items-center justify-between px-4 py-3 rounded-xl font-medium text-sm transition-colors cursor-pointer ${
                 activeTab === 'Orders'
@@ -781,26 +1000,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('CustomCake')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-colors cursor-pointer ${
-                activeTab === 'CustomCake'
-                  ? 'bg-primary-container text-on-primary-container font-bold shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">auto_fix_high</span>
-              <span>Custom Cake &amp; Price</span>
-            </button>
-            <button
               onClick={() => setActiveTab('Settings')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-colors cursor-pointer ${
+              className={`flex items-center justify-between px-4 py-3 rounded-xl font-medium text-sm transition-colors cursor-pointer ${
                 activeTab === 'Settings'
                   ? 'bg-primary-container text-on-primary-container font-bold shadow-xs'
                   : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
               }`}
             >
-              <span className="material-symbols-outlined text-lg">inventory_2</span>
-              <span>Kitchen Inventory</span>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-lg">badge</span>
+                <span>User Saved Profiles</span>
+              </div>
+              <span className="px-2 py-0.5 text-[11px] rounded-full bg-surface text-primary font-bold">
+                {savedProfiles.length}
+              </span>
             </button>
           </nav>
 
@@ -811,7 +1024,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span>Live Storefront</span>
             </div>
             <p className="text-xs text-on-surface-variant leading-relaxed">
-              Changes to cake items and custom cake pricing immediately update the customer storefront.
+              Changes to cake items, gallery designs, and custom cake pricing immediately update the customer storefront.
             </p>
             <button
               onClick={() => onNavigate('storefront')}
@@ -831,8 +1044,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 { id: 'Dashboard', label: 'All Overview' },
                 { id: 'Customers', label: `Logged-In (${loggedInUsers.length})` },
                 { id: 'Products', label: `Products (${catalogCakes.length})` },
+                { id: 'Gallery', label: `Gallery (${galleryList.length})` },
                 { id: 'Orders', label: `Orders (${orders.length})` },
-                { id: 'CustomCake', label: 'Custom Cake Pricing' },
+                { id: 'Settings', label: `Saved Profiles (${savedProfiles.length})` },
               ] as const
             ).map((t) => (
               <button
@@ -1504,6 +1718,390 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* =================================================================
+              PRIVILEGE 2B: INSPIRATION GALLERY MANAGEMENT (Supabase `gallery_items` & `gallery_settings`)
+          ================================================================== */}
+          {(activeTab === 'Dashboard' || activeTab === 'Gallery') && (
+            <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-outline-variant/30 pb-4">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
+                    Supabase Gallery Studio (`gallery_items` &amp; `gallery_settings` with RLS `auth.uid()`)
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
+                    Explore Our Design Inspiration Gallery ({galleryList.length} Items)
+                  </h2>
+                  <p className="text-xs text-on-surface-variant">
+                    Manage section heading, sub-heading, description, create new gallery items, upload cake images to Supabase Storage, update, and delete items.
+                  </p>
+                </div>
+              </div>
+
+              {/* Section Header Form (`gallery_settings`) */}
+              <form
+                onSubmit={handleSaveGalleryHeaderAdmin}
+                className="bg-surface rounded-2xl p-4 sm:p-5 border border-outline-variant/40 space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-primary flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base">title</span>
+                    <span>Gallery Section Header (`gallery_settings`)</span>
+                  </h3>
+                  <button
+                    type="submit"
+                    disabled={isSavingGalleryHeader}
+                    className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:opacity-95 transition-opacity cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingGalleryHeader ? 'Saving...' : 'Save Section Header'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Main Heading
+                    </label>
+                    <input
+                      type="text"
+                      value={galleryHeader.heading}
+                      onChange={(e) =>
+                        setGalleryHeader((prev) => ({ ...prev, heading: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Highlighted Sub-Heading
+                    </label>
+                    <input
+                      type="text"
+                      value={galleryHeader.subHeading}
+                      onChange={(e) =>
+                        setGalleryHeader((prev) => ({ ...prev, subHeading: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-primary font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Section Description
+                    </label>
+                    <input
+                      type="text"
+                      value={galleryHeader.description}
+                      onChange={(e) =>
+                        setGalleryHeader((prev) => ({ ...prev, description: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
+                    />
+                  </div>
+                </div>
+              </form>
+
+              {/* Create New Gallery Item Form (`gallery_items` + `app-files` Storage) */}
+              <form
+                onSubmit={handleInsertGalleryItem}
+                className="bg-surface rounded-2xl p-4 sm:p-5 border border-outline-variant/40 space-y-4"
+              >
+                <h3 className="text-sm font-bold text-primary flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">add_photo_alternate</span>
+                  <span>Create New Gallery Item &amp; Upload Cake Image</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Heading / Cake Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newGalleryTitle}
+                      onChange={(e) => setNewGalleryTitle(e.target.value)}
+                      placeholder="e.g. Royal Berry Drip"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Sub-Heading / Signature Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={newGallerySubHeading}
+                      onChange={(e) => setNewGallerySubHeading(e.target.value)}
+                      placeholder="e.g. Ruby Couverture · Vanilla Sponge"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Type / Category Badge *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newGalleryCategory}
+                      onChange={(e) => setNewGalleryCategory(e.target.value)}
+                      placeholder="e.g. BESPOKE ROYAL"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Marquee Row
+                    </label>
+                    <select
+                      value={newGalleryRow}
+                      onChange={(e) => setNewGalleryRow(Number(e.target.value) === 2 ? 2 : 1)}
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
+                    >
+                      <option value={1}>Row 1 (Floating Left)</option>
+                      <option value={2}>Row 2 (Floating Right)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-on-surface">
+                      Cake Image (Upload to Supabase Storage &quot;app-files&quot; or Paste URL)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary-container text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity shrink-0 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm">upload_file</span>
+                        <span>Upload Cake Image</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleGalleryImageSelect}
+                          className="hidden"
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={newGalleryImageUrl}
+                        onChange={(e) => setNewGalleryImageUrl(e.target.value)}
+                        placeholder="Or paste image URL..."
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs text-on-surface"
+                      />
+                    </div>
+                    {(newGalleryImagePreview || newGalleryImageUrl) && (
+                      <div className="flex items-center gap-3 pt-1">
+                        <img
+                          src={newGalleryImagePreview || newGalleryImageUrl}
+                          alt="Preview"
+                          className="w-12 h-12 rounded-lg object-cover border border-outline-variant"
+                        />
+                        <span className="text-[11px] text-emerald-700 font-semibold">
+                          {newGalleryImageFile
+                            ? `Ready to upload "${newGalleryImageFile.name}" to app-files`
+                            : 'Using provided image URL'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Description *
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={newGalleryDescription}
+                      onChange={(e) => setNewGalleryDescription(e.target.value)}
+                      placeholder="Describe the cake design, artistic details, and inspiration..."
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isInsertingGalleryItem}
+                    className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-sm hover:opacity-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-sm">add_circle</span>
+                    <span>
+                      {isInsertingGalleryItem
+                        ? 'Uploading & Creating...'
+                        : 'Create Gallery Item'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Current Gallery Items Grid with Update & Delete */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {galleryList.map((item) => {
+                  const isEditingThis = editingGalleryId === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-surface rounded-2xl border border-outline-variant/40 overflow-hidden flex flex-col justify-between shadow-2xs hover:shadow-md transition-all p-2.5"
+                    >
+                      <div>
+                        <div className="relative rounded-xl overflow-hidden aspect-[1.2/1] bg-surface-container">
+                          <img
+                            src={
+                              isEditingThis && editingGalleryPreview
+                                ? editingGalleryPreview
+                                : item.image
+                            }
+                            alt={item.title}
+                            className="w-full h-full object-cover"
+                          />
+                          <span className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-bold uppercase tracking-wider">
+                            {item.category}
+                          </span>
+                          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary text-on-primary text-[10px] font-bold">
+                            Row {item.rowNumber}
+                          </span>
+                        </div>
+
+                        <div className="pt-3 px-1">
+                          {isEditingThis ? (
+                            <div className="space-y-1.5">
+                              <input
+                                type="text"
+                                value={editingGalleryDraft.title}
+                                onChange={(e) =>
+                                  setEditingGalleryDraft((d) => ({ ...d, title: e.target.value }))
+                                }
+                                className="w-full px-2 py-1 rounded border border-outline-variant text-xs font-bold"
+                                placeholder="Heading / Title"
+                              />
+                              <input
+                                type="text"
+                                value={editingGalleryDraft.subHeading}
+                                onChange={(e) =>
+                                  setEditingGalleryDraft((d) => ({
+                                    ...d,
+                                    subHeading: e.target.value,
+                                  }))
+                                }
+                                className="w-full px-2 py-1 rounded border border-outline-variant text-[11px]"
+                                placeholder="Sub-heading"
+                              />
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <input
+                                  type="text"
+                                  value={editingGalleryDraft.category}
+                                  onChange={(e) =>
+                                    setEditingGalleryDraft((d) => ({
+                                      ...d,
+                                      category: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full px-2 py-1 rounded border border-outline-variant text-xs uppercase"
+                                  placeholder="Type"
+                                />
+                                <select
+                                  value={editingGalleryDraft.rowNumber}
+                                  onChange={(e) =>
+                                    setEditingGalleryDraft((d) => ({
+                                      ...d,
+                                      rowNumber: Number(e.target.value) === 2 ? 2 : 1,
+                                    }))
+                                  }
+                                  className="w-full px-2 py-1 rounded border border-outline-variant text-xs"
+                                >
+                                  <option value={1}>Row 1</option>
+                                  <option value={2}>Row 2</option>
+                                </select>
+                              </div>
+                              <textarea
+                                rows={2}
+                                value={editingGalleryDraft.description}
+                                onChange={(e) =>
+                                  setEditingGalleryDraft((d) => ({
+                                    ...d,
+                                    description: e.target.value,
+                                  }))
+                                }
+                                className="w-full px-2 py-1 rounded border border-outline-variant text-[11px]"
+                              />
+                              <label className="block px-2 py-1 rounded bg-primary-container/25 text-primary text-[10px] font-bold text-center cursor-pointer">
+                                Upload Replacement Image
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (!f) return;
+                                    setEditingGalleryFile(f);
+                                    setEditingGalleryPreview(URL.createObjectURL(f));
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          ) : (
+                            <>
+                              <h4 className="font-bold text-sm text-on-surface line-clamp-1">
+                                {item.title}
+                              </h4>
+                              {item.subHeading && (
+                                <p className="text-[10px] text-primary font-semibold mt-0.5 line-clamp-1">
+                                  {item.subHeading}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-2">
+                                {item.description}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-3 mt-2 border-t border-outline-variant/20 flex justify-between items-center px-1 gap-1.5">
+                        {isEditingThis ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveUpdateGalleryItem(item.id)}
+                              className="px-2.5 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingGalleryId(null)}
+                              className="px-2.5 py-1.5 rounded-lg border border-outline-variant text-xs font-semibold cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditGalleryItem(item)}
+                              className="px-2.5 py-1.5 rounded-lg bg-primary-container/20 text-primary hover:bg-primary-container/35 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingGalleryId === item.id}
+                              onClick={() => handleDeleteGalleryItem(item)}
+                              className="px-3 py-1.5 rounded-lg bg-error/10 text-error hover:bg-error hover:text-on-error text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            >
+                              <span className="material-symbols-outlined text-xs">delete</span>
+                              <span>{deletingGalleryId === item.id ? 'Deleting...' : 'Delete'}</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* =================================================================
               PRIVILEGE 3: ORDER HISTORY (Name, Email ID, Phone No., Date, Time of Issue)
           ================================================================== */}
           {(activeTab === 'Dashboard' || activeTab === 'Orders') && (
@@ -1644,491 +2242,328 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* =================================================================
-              PRIVILEGE 4: UPDATE DESIGN CUSTOM CAKE DATA & ITS PRICE
+              USER SAVED PROFILE DATA SECTION
+              Displays: Full Name, Email Address, Mobile No, Your Address,
+              Cover Image, Dietary Note, and Date on which the profile is saved
           ================================================================== */}
-          {(activeTab === 'Dashboard' || activeTab === 'CustomCake') && (
+          {(activeTab === 'Settings' || activeTab === 'Dashboard') && (
             <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-6 shadow-xs">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-outline-variant/30 pb-4">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
-                    Bespoke Configurator Pricing &amp; Options
-                  </span>
-                  <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
-                    Update Design Custom Cake Data &amp; Prices
-                  </h2>
-                  <p className="text-xs text-on-surface-variant">
-                    Modify tier prices, guest counts, accent pricing, sponge flavors, fillings, and finishes for the Design Custom Cake studio.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSaveBuilderSettings}
-                  disabled={isSavingCustomSettings}
-                  className="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-sm hover:opacity-95 transition-all cursor-pointer flex items-center gap-2 shrink-0"
-                >
-                  <span className="material-symbols-outlined text-sm">save</span>
-                  <span>
-                    {isSavingCustomSettings
-                      ? 'Saving to Supabase...'
-                      : 'Save Custom Cake Settings'}
-                  </span>
-                </button>
-              </div>
-
-              {/* Tier Architecture & Price Editor */}
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-on-surface">
-                    1. Tier Architecture &amp; Base Prices (Rs / ₹)
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-bold text-on-surface-variant">
-                      Price Per Bespoke Accent (₹):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={builderSettings.accentPrice}
-                      onChange={(e) =>
-                        setBuilderSettings((prev) => ({
-                          ...prev,
-                          accentPrice: Math.max(0, Number(e.target.value) || 0),
-                        }))
-                      }
-                      className="w-28 px-3 py-1.5 rounded-xl border border-outline-variant bg-surface text-xs font-bold text-primary"
-                    />
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-xs">
+                    <span className="material-symbols-outlined">badge</span>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {builderSettings.tiers.map((tier) => (
-                    <div
-                      key={tier.count}
-                      className="p-4 rounded-xl bg-surface border border-outline-variant/40 space-y-2.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-primary uppercase">
-                          Tier {tier.count}
-                        </span>
-                        <span className="text-xs font-bold text-emerald-700">
-                          ₹{Number(tier.price).toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-on-surface-variant mb-0.5">
-                          Display Label
-                        </label>
-                        <input
-                          type="text"
-                          value={tier.label}
-                          onChange={(e) =>
-                            handleTierChange(tier.count, 'label', e.target.value)
-                          }
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-outline-variant text-xs bg-surface-container/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-on-surface-variant mb-0.5">
-                          Serving / Guest Capacity
-                        </label>
-                        <input
-                          type="text"
-                          value={tier.guests}
-                          onChange={(e) =>
-                            handleTierChange(tier.count, 'guests', e.target.value)
-                          }
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-outline-variant text-xs bg-surface-container/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-on-surface-variant mb-0.5">
-                          Tier Price (₹)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={tier.price}
-                          onChange={(e) =>
-                            handleTierChange(tier.count, 'price', e.target.value)
-                          }
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-outline-variant text-xs font-bold text-primary bg-surface-container/30"
-                        />
-                      </div>
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
+                        Supabase Saved Customer Profiles (`profiles` &amp; `app-files`)
+                      </span>
                     </div>
-                  ))}
+                    <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
+                      User Saved Profile Data ({filteredSavedProfiles.length})
+                    </h2>
+                    <p className="text-xs text-on-surface-variant">
+                      View each user&apos;s Full Name, Email Address, Mobile No., Your Address, Cover Image, Dietary Note, and the Date on which the profile was saved.
+                    </p>
+                  </div>
                 </div>
+                <span className="px-3 py-1 rounded-full bg-primary text-on-primary text-xs font-bold">
+                  {filteredSavedProfiles.length}{' '}
+                  {filteredSavedProfiles.length === 1 ? 'Saved Profile' : 'Saved Profiles'}
+                </span>
               </div>
 
-              {/* Sponge Flavors, Fillings, Finishes, Accents Editors */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Sponge Flavors */}
-                <div className="p-4 rounded-xl bg-surface border border-outline-variant/40 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-                    2. Artisanal Sponge Flavors ({builderSettings.spongeFlavors.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {builderSettings.spongeFlavors.map((flavor) => (
-                      <span
-                        key={flavor}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container text-xs text-on-surface"
-                      >
-                        <span>{flavor}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setBuilderSettings((prev) => ({
-                              ...prev,
-                              spongeFlavors: prev.spongeFlavors.filter((f) => f !== flavor),
-                            }))
-                          }
-                          className="text-on-surface-variant hover:text-error font-bold cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newFlavorInput}
-                      onChange={(e) => setNewFlavorInput(e.target.value)}
-                      placeholder="Add new sponge flavor..."
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-outline-variant text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!newFlavorInput.trim()) return;
-                        setBuilderSettings((prev) => ({
-                          ...prev,
-                          spongeFlavors: [...prev.spongeFlavors, newFlavorInput.trim()],
-                        }));
-                        setNewFlavorInput('');
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* Core Fillings */}
-                <div className="p-4 rounded-xl bg-surface border border-outline-variant/40 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-                    3. Handcrafted Core Fillings ({builderSettings.fillings.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {builderSettings.fillings.map((fill) => (
-                      <span
-                        key={fill}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container text-xs text-on-surface"
-                      >
-                        <span>{fill}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setBuilderSettings((prev) => ({
-                              ...prev,
-                              fillings: prev.fillings.filter((f) => f !== fill),
-                            }))
-                          }
-                          className="text-on-surface-variant hover:text-error font-bold cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newFillingInput}
-                      onChange={(e) => setNewFillingInput(e.target.value)}
-                      placeholder="Add new core filling..."
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-outline-variant text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!newFillingInput.trim()) return;
-                        setBuilderSettings((prev) => ({
-                          ...prev,
-                          fillings: [...prev.fillings, newFillingInput.trim()],
-                        }));
-                        setNewFillingInput('');
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* Exterior Finishes */}
-                <div className="p-4 rounded-xl bg-surface border border-outline-variant/40 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-                    4. Exterior Finishes ({builderSettings.exteriorFinishes.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {builderSettings.exteriorFinishes.map((fin) => (
-                      <span
-                        key={fin}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container text-xs text-on-surface"
-                      >
-                        <span>{fin}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setBuilderSettings((prev) => ({
-                              ...prev,
-                              exteriorFinishes: prev.exteriorFinishes.filter((f) => f !== fin),
-                            }))
-                          }
-                          className="text-on-surface-variant hover:text-error font-bold cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newFinishInput}
-                      onChange={(e) => setNewFinishInput(e.target.value)}
-                      placeholder="Add new exterior finish..."
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-outline-variant text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!newFinishInput.trim()) return;
-                        setBuilderSettings((prev) => ({
-                          ...prev,
-                          exteriorFinishes: [...prev.exteriorFinishes, newFinishInput.trim()],
-                        }));
-                        setNewFinishInput('');
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* Bespoke Accents */}
-                <div className="p-4 rounded-xl bg-surface border border-outline-variant/40 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-                    5. Bespoke Accents (+₹{builderSettings.accentPrice} ea)
-                  </h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {builderSettings.accents.map((acc) => (
-                      <span
-                        key={acc}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container text-xs text-on-surface"
-                      >
-                        <span>{acc}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setBuilderSettings((prev) => ({
-                              ...prev,
-                              accents: prev.accents.filter((a) => a !== acc),
-                            }))
-                          }
-                          className="text-on-surface-variant hover:text-error font-bold cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newAccentInput}
-                      onChange={(e) => setNewAccentInput(e.target.value)}
-                      placeholder="Add new bespoke accent..."
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-outline-variant text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!newAccentInput.trim()) return;
-                        setBuilderSettings((prev) => ({
-                          ...prev,
-                          accents: [...prev.accents, newAccentInput.trim()],
-                        }));
-                        setNewAccentInput('');
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Submitted Custom Cakes in Supabase (`custom_cakes` table) */}
-              <div className="space-y-3 pt-2">
-                <h3 className="text-sm font-bold text-on-surface">
-                  Submitted Custom Cake Designs in Supabase ({customCakesList.length})
-                </h3>
-                {customCakesList.length === 0 ? (
-                  <p className="text-xs text-on-surface-variant bg-surface p-4 rounded-xl border border-outline-variant/30">
-                    No customer custom cake records in <code className="font-mono">custom_cakes</code> table yet.
+              {/* Visual Profile Cards with Cover Image Banner */}
+              {filteredSavedProfiles.length === 0 ? (
+                <div className="bg-surface rounded-2xl border border-outline-variant/30 p-8 text-center space-y-2">
+                  <span className="material-symbols-outlined text-3xl text-outline">
+                    contact_page
+                  </span>
+                  <p className="text-sm font-bold text-on-surface">
+                    No saved user profiles found yet.
                   </p>
-                ) : (
+                  <p className="text-xs text-on-surface-variant">
+                    When customers save their profile details on the Profile page, their Full Name, Email Address, Mobile No., Address, Cover Image, Dietary Note, and Saved Date appear here automatically.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {filteredSavedProfiles.map((profile) => {
+                      const dt = new Date(profile.savedAt);
+                      const validDt = !isNaN(dt.getTime());
+                      const formattedSavedDate = validDt
+                        ? dt.toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })
+                        : '—';
+                      const formattedSavedTime = validDt
+                        ? dt.toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true,
+                          })
+                        : '';
+
+                      return (
+                        <div
+                          key={profile.id}
+                          className="bg-surface rounded-2xl border border-outline-variant/40 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col"
+                        >
+                          {/* Cover Image Banner */}
+                          <div className="relative h-36 w-full bg-surface-container overflow-hidden border-b border-outline-variant/30">
+                            {profile.coverImage ? (
+                              <>
+                                <img
+                                  src={profile.coverImage}
+                                  alt={`${profile.fullName} Cover`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
+                                <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/65 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-xs">
+                                  <span className="material-symbols-outlined text-xs">image</span>
+                                  <span>Cover Image Uploaded</span>
+                                </span>
+                              </>
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-r from-primary/15 via-primary-container/25 to-secondary-container/30 flex flex-col items-center justify-center text-on-surface-variant gap-1">
+                                <span className="material-symbols-outlined text-2xl text-primary/60">
+                                  wallpaper
+                                </span>
+                                <span className="text-[11px] font-semibold">
+                                  No Cover Image Uploaded
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Saved Date Badge */}
+                            <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-surface/90 text-on-surface text-[11px] font-bold shadow-xs flex items-center gap-1 backdrop-blur-xs">
+                              <span className="material-symbols-outlined text-xs text-primary">
+                                event_available
+                              </span>
+                              <span>
+                                Saved: {formattedSavedDate}
+                                {formattedSavedTime ? ` · ${formattedSavedTime}` : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Profile Body */}
+                          <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-4">
+                            <div className="space-y-3.5">
+                              {/* Avatar + Full Name + Role */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  {profile.coverImage ? (
+                                    <img
+                                      src={profile.coverImage}
+                                      alt={profile.fullName}
+                                      className="w-12 h-12 rounded-xl object-cover border border-outline-variant shadow-2xs shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-xl bg-primary-container text-on-primary-container font-bold text-base flex items-center justify-center uppercase shrink-0">
+                                      {(profile.fullName || 'CZ').slice(0, 2)}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <span className="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                                      Full Name
+                                    </span>
+                                    <h3 className="text-base font-black text-on-surface leading-tight">
+                                      {profile.fullName || '—'}
+                                    </h3>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  {profile.role && (
+                                    <span
+                                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                        profile.role === 'Admin'
+                                          ? 'bg-primary text-on-primary'
+                                          : 'bg-secondary-container text-on-secondary-container'
+                                      }`}
+                                    >
+                                      {profile.role}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSavedProfile(profile)}
+                                    className="p-1.5 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors cursor-pointer"
+                                    title="Remove saved profile record"
+                                  >
+                                    <span className="material-symbols-outlined text-base">
+                                      delete
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Details Grid: Email Address, Mobile No, Your Address, Date Saved */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-xs text-primary">
+                                      mail
+                                    </span>
+                                    Email Address
+                                  </span>
+                                  <p className="text-xs font-semibold text-on-surface mt-0.5 break-all">
+                                    {profile.email || '—'}
+                                  </p>
+                                </div>
+
+                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-xs text-primary">
+                                      call
+                                    </span>
+                                    Mobile No.
+                                  </span>
+                                  <p className="text-xs font-semibold text-on-surface mt-0.5 tabular-nums">
+                                    {profile.phone || '—'}
+                                  </p>
+                                </div>
+
+                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-xs text-primary">
+                                      location_on
+                                    </span>
+                                    Your Address
+                                  </span>
+                                  <p className="text-xs font-semibold text-on-surface mt-0.5">
+                                    {profile.address && profile.address !== '—'
+                                      ? profile.address
+                                      : profile.cityCode || '—'}
+                                  </p>
+                                </div>
+
+                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-xs text-primary">
+                                      restaurant
+                                    </span>
+                                    Dietary Note
+                                  </span>
+                                  <p className="text-xs font-medium text-on-surface mt-0.5 whitespace-pre-wrap">
+                                    {profile.dietaryNotes && profile.dietaryNotes !== '—'
+                                      ? profile.dietaryNotes
+                                      : 'No dietary notes specified'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Footer: Cover Image File & Saved Date */}
+                            <div className="pt-3 border-t border-outline-variant/25 flex flex-wrap items-center justify-between gap-2 text-[11px] text-on-surface-variant">
+                              <span className="inline-flex items-center gap-1 font-medium">
+                                <span className="material-symbols-outlined text-sm text-primary">
+                                  photo_library
+                                </span>
+                                {profile.coverImage
+                                  ? profile.coverImageName || 'Profile Cover Image'
+                                  : 'No Cover Image'}
+                              </span>
+                              <span className="inline-flex items-center gap-1 font-bold text-on-surface tabular-nums">
+                                <span className="material-symbols-outlined text-sm text-primary">
+                                  schedule
+                                </span>
+                                Saved on {formattedSavedDate}
+                                {formattedSavedTime ? `, ${formattedSavedTime}` : ''}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Structured Summary Table of All Saved User Profiles */}
                   <div className="overflow-x-auto rounded-xl border border-outline-variant/30 bg-surface">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-outline-variant/30 bg-surface-container/60 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
-                          <th className="py-3 px-4">Tiers</th>
-                          <th className="py-3 px-4">Sponge Flavor</th>
-                          <th className="py-3 px-4">Core Filling</th>
-                          <th className="py-3 px-4">Inscription</th>
-                          <th className="py-3 px-4">Price (₹)</th>
-                          <th className="py-3 px-4 text-right">Actions</th>
+                          <th className="py-3 px-4">Cover Image</th>
+                          <th className="py-3 px-4">Full Name</th>
+                          <th className="py-3 px-4">Email Address</th>
+                          <th className="py-3 px-4">Mobile No.</th>
+                          <th className="py-3 px-4">Your Address</th>
+                          <th className="py-3 px-4">Dietary Note</th>
+                          <th className="py-3 px-4">Date Profile Saved</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-outline-variant/20 text-xs">
-                        {customCakesList.map((cc) => {
-                          const isEditing = editingCustomCakeId === cc.id;
+                      <tbody className="divide-y divide-outline-variant/20 text-xs sm:text-sm">
+                        {filteredSavedProfiles.map((profile) => {
+                          const dt = new Date(profile.savedAt);
+                          const validDt = !isNaN(dt.getTime());
+                          const formattedDate = validDt
+                            ? dt.toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })
+                            : '—';
+                          const formattedTime = validDt
+                            ? dt.toLocaleTimeString('en-IN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true,
+                              })
+                            : '';
+
                           return (
-                            <tr key={cc.id} className="hover:bg-surface-container/40">
-                              <td className="py-3 px-4 font-bold text-primary">
-                                {isEditing ? (
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="4"
-                                    value={editingCustomCakeDraft.tiers ?? cc.tiers}
-                                    onChange={(e) =>
-                                      setEditingCustomCakeDraft((d) => ({
-                                        ...d,
-                                        tiers: Number(e.target.value),
-                                      }))
-                                    }
-                                    className="w-16 px-2 py-1 rounded border border-outline-variant"
-                                  />
-                                ) : (
-                                  `${cc.tiers} Tiers`
-                                )}
-                              </td>
+                            <tr
+                              key={`row-${profile.id}`}
+                              className="hover:bg-surface-container/40 transition-colors"
+                            >
                               <td className="py-3 px-4">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={
-                                      editingCustomCakeDraft.sponge_flavor ?? cc.sponge_flavor
-                                    }
-                                    onChange={(e) =>
-                                      setEditingCustomCakeDraft((d) => ({
-                                        ...d,
-                                        sponge_flavor: e.target.value,
-                                      }))
-                                    }
-                                    className="w-full px-2 py-1 rounded border border-outline-variant"
+                                {profile.coverImage ? (
+                                  <img
+                                    src={profile.coverImage}
+                                    alt={profile.fullName}
+                                    className="w-14 h-10 rounded-lg object-cover border border-outline-variant shadow-2xs"
                                   />
                                 ) : (
-                                  cc.sponge_flavor
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-on-surface-variant">
+                                    <span className="material-symbols-outlined text-sm">
+                                      hide_image
+                                    </span>
+                                    None
+                                  </span>
                                 )}
                               </td>
-                              <td className="py-3 px-4">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={editingCustomCakeDraft.filling ?? cc.filling}
-                                    onChange={(e) =>
-                                      setEditingCustomCakeDraft((d) => ({
-                                        ...d,
-                                        filling: e.target.value,
-                                      }))
-                                    }
-                                    className="w-full px-2 py-1 rounded border border-outline-variant"
-                                  />
-                                ) : (
-                                  cc.filling
-                                )}
+                              <td className="py-3 px-4 font-bold text-on-surface whitespace-nowrap">
+                                {profile.fullName || '—'}
                               </td>
-                              <td className="py-3 px-4 italic text-on-surface-variant">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={
-                                      editingCustomCakeDraft.inscription ?? cc.inscription
-                                    }
-                                    onChange={(e) =>
-                                      setEditingCustomCakeDraft((d) => ({
-                                        ...d,
-                                        inscription: e.target.value,
-                                      }))
-                                    }
-                                    className="w-full px-2 py-1 rounded border border-outline-variant"
-                                  />
-                                ) : (
-                                  `"${cc.inscription}"`
-                                )}
+                              <td className="py-3 px-4 text-on-surface whitespace-nowrap">
+                                {profile.email || '—'}
                               </td>
-                              <td className="py-3 px-4 font-black text-on-surface tabular-nums">
-                                {isEditing ? (
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={
-                                      editingCustomCakeDraft.estimated_price ??
-                                      cc.estimated_price
-                                    }
-                                    onChange={(e) =>
-                                      setEditingCustomCakeDraft((d) => ({
-                                        ...d,
-                                        estimated_price: Number(e.target.value),
-                                      }))
-                                    }
-                                    className="w-24 px-2 py-1 rounded border border-outline-variant font-bold text-primary"
-                                  />
-                                ) : (
-                                  `₹${Number(cc.estimated_price).toLocaleString('en-IN')}`
-                                )}
+                              <td className="py-3 px-4 font-medium text-on-surface tabular-nums whitespace-nowrap">
+                                {profile.phone || '—'}
                               </td>
-                              <td className="py-3 px-4 text-right space-x-2 whitespace-nowrap">
-                                {isEditing ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => cc.id && handleSaveCustomCakeRow(cc.id)}
-                                      className="px-2.5 py-1 rounded bg-primary text-on-primary font-bold cursor-pointer"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingCustomCakeId(null)}
-                                      className="px-2 py-1 rounded border border-outline-variant cursor-pointer"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleStartEditCustomCakeRow(cc)}
-                                      className="px-2.5 py-1 rounded bg-primary-container/20 text-primary font-bold hover:bg-primary-container/35 cursor-pointer"
-                                    >
-                                      Edit Price / Data
-                                    </button>
-                                    {cc.id && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteCustomCakeRow(cc.id!)}
-                                        className="px-2 py-1 rounded text-error hover:bg-error/10 font-bold cursor-pointer"
-                                      >
-                                        Delete
-                                      </button>
-                                    )}
-                                  </>
+                              <td className="py-3 px-4 text-on-surface max-w-[220px]">
+                                <p className="whitespace-normal break-words">
+                                  {profile.address && profile.address !== '—'
+                                    ? profile.address
+                                    : profile.cityCode || '—'}
+                                </p>
+                              </td>
+                              <td className="py-3 px-4 text-on-surface-variant max-w-[220px]">
+                                <p className="whitespace-normal break-words">
+                                  {profile.dietaryNotes || '—'}
+                                </p>
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap tabular-nums">
+                                <span className="font-bold text-on-surface block">
+                                  {formattedDate}
+                                </span>
+                                {formattedTime && (
+                                  <span className="text-[11px] text-primary font-semibold">
+                                    {formattedTime}
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -2137,56 +2572,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </tbody>
                     </table>
                   </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Kitchen Inventory / Settings Section */}
-          {activeTab === 'Settings' && (
-            <section className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/30 flex flex-col gap-4 shadow-xs">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-bold text-on-surface">Kitchen Inventory &amp; Stock</h2>
-                <span className="px-2.5 py-1 rounded-full bg-error-container text-on-error-container text-xs font-bold">
-                  {stockItems.filter((i) => !i.isRestocked).length} low stock
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {stockItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-surface border border-outline-variant/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary font-bold">
-                        <span className="material-symbols-outlined text-sm">{item.icon}</span>
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-on-surface leading-tight">
-                          {item.name}
-                        </h4>
-                        <p
-                          className={`text-xs font-medium ${
-                            item.isRestocked ? 'text-emerald-600' : 'text-error'
-                          }`}
-                        >
-                          {item.remaining}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleRestock(item.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        item.isRestocked
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-primary-container text-on-primary-container hover:opacity-90'
-                      }`}
-                    >
-                      {item.isRestocked ? 'Restocked ✓' : 'Restock'}
-                    </button>
-                  </div>
-                ))}
-              </div>
+                </>
+              )}
             </section>
           )}
         </main>
