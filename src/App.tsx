@@ -58,6 +58,14 @@ export default function App() {
       ) {
         return 'update-password';
       }
+      if (
+        path === '/dashboard' ||
+        path.startsWith('/dashboard/') ||
+        path === '/admin' ||
+        path.startsWith('/admin/')
+      ) {
+        return 'dashboard';
+      }
       if (path === '/profile') return 'profile';
       if (path === '/login' || path === '/signin') return 'signin';
       if (path === '/signup') return 'signup';
@@ -780,7 +788,7 @@ export default function App() {
         />
       )}
 
-      {currentScreen === 'dashboard' && currentUser?.role === 'Admin' && (
+      {currentScreen === 'dashboard' && (!currentUser || currentUser.role === 'Admin') && (
         <AdminDashboard
           onNavigate={(screen) => navigateTo(screen)}
           onOpenNewCustomOrder={() => {
