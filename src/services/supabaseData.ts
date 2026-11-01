@@ -1399,8 +1399,39 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
     return { data: unified, error: null };
   }
 
+  const userEmailLower = (session?.user?.email || '').trim().toLowerCase();
+  const byCustomerOrderId = new Map<string, Order>();
+
+  sharedOrders.forEach((ord) => {
+    if (!ord?.id || deletedOrderIds.has(ord.id)) return;
+    const matchesUser =
+      (ord.userId && ord.userId === userId) ||
+      (userEmailLower &&
+        ord.customerEmail &&
+        ord.customerEmail.trim().toLowerCase() === userEmailLower);
+    if (matchesUser) {
+      byCustomerOrderId.set(ord.id, ord);
+    }
+  });
+
+  mapped.forEach((ord) => {
+    if (!ord?.id || deletedOrderIds.has(ord.id)) return;
+    const existingShared =
+      byCustomerOrderId.get(ord.id) || sharedOrders.find((so) => so.id === ord.id);
+    byCustomerOrderId.set(ord.id, {
+      ...ord,
+      status: existingShared?.status || ord.status,
+    });
+  });
+
+  const customerOrders = Array.from(byCustomerOrderId.values()).sort((a, b) => {
+    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tB - tA;
+  });
+
   return {
-    data: mapped.filter((o) => !deletedOrderIds.has(o.id)),
+    data: customerOrders,
     error: null,
   };
 };

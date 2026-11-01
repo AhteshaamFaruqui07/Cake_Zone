@@ -24,7 +24,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>('home');
+  const [hoveredNavId, setHoveredNavId] = useState<string | null>(null);
+  const [pillStyle, setPillStyle] = useState<{ left: number; width: number; opacity: number }>({
+    left: 4,
+    width: 88,
+    opacity: 1,
+  });
+  const [isPillMorphing, setIsPillMorphing] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const navItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const prevTargetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (currentScreen !== 'storefront') return;
@@ -111,6 +121,54 @@ export const Navbar: React.FC<NavbarProps> = ({
     }, actionLabel);
   };
 
+  const activeNavId =
+    currentScreen === 'signin'
+      ? 'signin'
+      : currentScreen === 'storefront'
+      ? activeSection
+      : 'home';
+  const targetNavId = hoveredNavId ?? activeNavId;
+
+  useEffect(() => {
+    const updatePill = () => {
+      const btn = navItemRefs.current[targetNavId];
+      if (btn && btn.offsetWidth > 0) {
+        setPillStyle({
+          left: btn.offsetLeft,
+          width: btn.offsetWidth,
+          opacity: 1,
+        });
+      }
+    };
+
+    updatePill();
+
+    let morphTimer: ReturnType<typeof setTimeout> | undefined;
+    if (prevTargetIdRef.current && prevTargetIdRef.current !== targetNavId) {
+      setIsPillMorphing(true);
+      morphTimer = setTimeout(() => setIsPillMorphing(false), 240);
+    }
+    prevTargetIdRef.current = targetNavId;
+
+    window.addEventListener('resize', updatePill);
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined' && navRef.current) {
+      observer = new ResizeObserver(updatePill);
+      observer.observe(navRef.current);
+    }
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready
+        .then(updatePill)
+        .catch(() => {});
+    }
+
+    return () => {
+      if (morphTimer) clearTimeout(morphTimer);
+      window.removeEventListener('resize', updatePill);
+      observer?.disconnect();
+    };
+  }, [targetNavId, user, currentScreen]);
+
   return (
     <header
       ref={headerRef}
@@ -139,7 +197,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onNavigate('storefront');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shadow-xs group-hover:scale-105 transition-transform cursor-pointer"
+            className="w-12 h-12 -my-1.5 sm:w-[52px] sm:h-[52px] sm:-my-1.5 rounded-full object-cover shadow-xs group-hover:scale-105 transition-transform cursor-pointer shrink-0"
             onError={(e) => {
               (e.currentTarget as HTMLElement).style.display = 'none';
             }}
@@ -159,92 +217,117 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-7">
-          <button
-            type="button"
-            onClick={() => {
-              handleProtectedNav(() => {
-                setActiveSection('home');
-                onNavigate('storefront');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }, 'navigate Home');
+        <nav
+          ref={navRef}
+          onMouseLeave={() => setHoveredNavId(null)}
+          className="relative hidden md:flex items-center gap-0.5 lg:gap-1 bg-transparent border-0 shadow-none"
+        >
+          {/* Single Continuous Sliding & Morphing Colored Pill */}
+          <span
+            aria-hidden="true"
+            style={{
+              left: `${pillStyle.left}px`,
+              width: `${pillStyle.width}px`,
+              opacity: pillStyle.opacity,
+              transform: isPillMorphing ? 'scaleX(1.08) scaleY(0.92)' : 'scaleX(1) scaleY(1)',
+              transition:
+                'left 420ms cubic-bezier(0.32, 1.25, 0.37, 1), width 380ms cubic-bezier(0.32, 1.25, 0.37, 1), transform 240ms ease-out, opacity 200ms ease-out',
             }}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-              currentScreen === 'storefront' && activeSection === 'home'
-                ? 'text-primary font-bold border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-primary font-medium'
-            }`}
+            className="pointer-events-none absolute inset-y-0 rounded-full bg-gradient-to-r from-primary via-[#7c3aed] to-[#9333ea] border-0 shadow-[0_6px_20px_-2px_rgba(124,58,237,0.55),inset_0_1px_2px_rgba(255,255,255,0.35)] z-0"
           >
-            Home
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('collections', 'browse collections')}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-              currentScreen === 'storefront' && activeSection === 'collections'
-                ? 'text-primary font-bold border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-primary font-medium'
-            }`}
-          >
-            Collections
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('inspiration-gallery', 'view Gallery section')}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-              currentScreen === 'storefront' && activeSection === 'inspiration-gallery'
-                ? 'text-primary font-bold border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-primary font-medium'
-            }`}
-          >
-            Gallery
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('about', 'view About section')}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-              currentScreen === 'storefront' && activeSection === 'about'
-                ? 'text-primary font-bold border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-primary font-medium'
-            }`}
-          >
-            About
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('custom-cakes', 'customize cakes')}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-              currentScreen === 'storefront' && activeSection === 'custom-cakes'
-                ? 'text-primary font-bold border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-primary font-medium'
-            }`}
-          >
-            Custom Cakes
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('testimonials', 'view testimonials')}
-            className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-              currentScreen === 'storefront' && activeSection === 'testimonials'
-                ? 'text-primary font-bold border-b-2 border-primary'
-                : 'text-on-surface-variant hover:text-primary font-medium'
-            }`}
-          >
-            Testimonial
-          </button>
-          {!user && (
-            <button
-              type="button"
-              onClick={() => onNavigate('signin')}
-              className={`text-sm font-label transition-colors pb-1 cursor-pointer whitespace-nowrap focus:outline-none ${
-                currentScreen === 'signin'
-                  ? 'text-primary font-bold border-b-2 border-primary'
-                  : 'text-on-surface-variant hover:text-primary font-medium'
-              }`}
-            >
-              Login
-            </button>
-          )}
+            {/* Top Subtle Specular Highlight Arc */}
+            <span className="absolute top-[2px] left-2.5 right-2.5 h-[38%] rounded-full bg-gradient-to-b from-white/30 via-white/10 to-transparent" />
+          </span>
+
+          {[
+            {
+              id: 'home',
+              label: 'Home',
+              icon: 'home',
+              isActive: currentScreen === 'storefront' && activeSection === 'home',
+              onClick: () => {
+                handleProtectedNav(() => {
+                  setActiveSection('home');
+                  onNavigate('storefront');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 'navigate Home');
+              },
+            },
+            {
+              id: 'collections',
+              label: 'Collections',
+              icon: 'cake',
+              isActive: currentScreen === 'storefront' && activeSection === 'collections',
+              onClick: () => scrollToSection('collections', 'browse collections'),
+            },
+            {
+              id: 'inspiration-gallery',
+              label: 'Gallery',
+              icon: 'auto_awesome',
+              isActive: currentScreen === 'storefront' && activeSection === 'inspiration-gallery',
+              onClick: () => scrollToSection('inspiration-gallery', 'view Gallery section'),
+            },
+            {
+              id: 'about',
+              label: 'About',
+              icon: 'storefront',
+              isActive: currentScreen === 'storefront' && activeSection === 'about',
+              onClick: () => scrollToSection('about', 'view About section'),
+            },
+            {
+              id: 'custom-cakes',
+              label: 'Custom Cakes',
+              icon: 'palette',
+              isActive: currentScreen === 'storefront' && activeSection === 'custom-cakes',
+              onClick: () => scrollToSection('custom-cakes', 'customize cakes'),
+            },
+            {
+              id: 'testimonials',
+              label: 'Testimonial',
+              icon: 'verified',
+              isActive: currentScreen === 'storefront' && activeSection === 'testimonials',
+              onClick: () => scrollToSection('testimonials', 'view testimonials'),
+            },
+            ...(!user
+              ? [
+                  {
+                    id: 'signin',
+                    label: 'Login',
+                    icon: 'person',
+                    isActive: currentScreen === 'signin',
+                    onClick: () => onNavigate('signin'),
+                  },
+                ]
+              : []),
+          ].map((item) => {
+            const isHighlighted = targetNavId === item.id;
+            return (
+              <button
+                key={item.id}
+                ref={(el) => {
+                  navItemRefs.current[item.id] = el;
+                }}
+                type="button"
+                onMouseEnter={() => setHoveredNavId(item.id)}
+                onFocus={() => setHoveredNavId(item.id)}
+                onClick={item.onClick}
+                className={`group relative z-10 px-2.5 lg:px-3.5 py-1.5 rounded-full border-0 outline-none text-xs lg:text-sm font-label cursor-pointer whitespace-nowrap focus:outline-none flex items-center gap-1 lg:gap-1.5 transition-all duration-300 ${
+                  isHighlighted
+                    ? 'text-white font-extrabold drop-shadow-[0_1px_4px_rgba(0,0,0,0.2)]'
+                    : 'text-on-surface-variant hover:text-primary font-semibold'
+                }`}
+              >
+                <span
+                  className={`material-symbols-outlined text-[14px] lg:text-[15px] leading-none transition-transform duration-300 ${
+                    isHighlighted ? 'scale-110 text-white' : 'text-on-surface-variant/80 group-hover:text-primary'
+                  }`}
+                >
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         {/* Right Actions (Cart, Profile, Mobile Menu Button) */}
@@ -373,69 +456,138 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Navigation Drawer */}
       {isMobileMenuOpen && (
-        <div className="md:hidden absolute right-0 top-full w-[62%] min-w-[225px] max-w-[280px] z-50 border-t border-l border-outline-variant/40 bg-[#fbf6f0] shadow-2xl rounded-bl-2xl overflow-hidden animate-fadeIn">
+        <div className="md:hidden absolute right-0 top-full w-[68%] min-w-[235px] max-w-[290px] max-h-[calc(100dvh-60px)] overflow-y-auto z-50 border-t border-l border-outline-variant/40 bg-[#fbf6f0] shadow-2xl rounded-bl-2xl animate-fadeIn">
           <nav className="relative flex flex-col pt-3">
             <div className="flex flex-col px-3 pb-2 space-y-1 relative z-10">
               <button
                 type="button"
                 onClick={() => {
                   handleProtectedNav(() => {
+                    setActiveSection('home');
                     onNavigate('storefront');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }, 'navigate Home');
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
-                  currentScreen === 'storefront'
-                    ? 'bg-primary/10 text-primary font-bold'
-                    : 'text-on-surface hover:bg-surface-container'
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-left cursor-pointer ${
+                  currentScreen === 'storefront' && activeSection === 'home'
+                    ? 'bg-primary text-white font-bold shadow-xs'
+                    : 'font-medium text-on-surface hover:bg-surface-container'
                 }`}
               >
-                <span className="material-symbols-outlined text-base text-primary">home</span>
+                <span
+                  className={`material-symbols-outlined text-base ${
+                    currentScreen === 'storefront' && activeSection === 'home'
+                      ? 'text-white'
+                      : 'text-primary'
+                  }`}
+                >
+                  home
+                </span>
                 <span>Home</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => scrollToSection('collections', 'browse collections')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-on-surface hover:bg-surface-container transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-left cursor-pointer ${
+                  currentScreen === 'storefront' && activeSection === 'collections'
+                    ? 'bg-primary text-white font-bold shadow-xs'
+                    : 'font-medium text-on-surface hover:bg-surface-container'
+                }`}
               >
-                <span className="material-symbols-outlined text-base text-primary">cake</span>
+                <span
+                  className={`material-symbols-outlined text-base ${
+                    currentScreen === 'storefront' && activeSection === 'collections'
+                      ? 'text-white'
+                      : 'text-primary'
+                  }`}
+                >
+                  cake
+                </span>
                 <span>Collections</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => scrollToSection('inspiration-gallery', 'view Gallery section')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-on-surface hover:bg-surface-container transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-left cursor-pointer ${
+                  currentScreen === 'storefront' && activeSection === 'inspiration-gallery'
+                    ? 'bg-primary text-white font-bold shadow-xs'
+                    : 'font-medium text-on-surface hover:bg-surface-container'
+                }`}
               >
-                <span className="material-symbols-outlined text-base text-primary">photo_library</span>
+                <span
+                  className={`material-symbols-outlined text-base ${
+                    currentScreen === 'storefront' && activeSection === 'inspiration-gallery'
+                      ? 'text-white'
+                      : 'text-primary'
+                  }`}
+                >
+                  photo_library
+                </span>
                 <span>Gallery</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => scrollToSection('about', 'view About section')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-on-surface hover:bg-surface-container transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-left cursor-pointer ${
+                  currentScreen === 'storefront' && activeSection === 'about'
+                    ? 'bg-primary text-white font-bold shadow-xs'
+                    : 'font-medium text-on-surface hover:bg-surface-container'
+                }`}
               >
-                <span className="material-symbols-outlined text-base text-primary">auto_awesome</span>
+                <span
+                  className={`material-symbols-outlined text-base ${
+                    currentScreen === 'storefront' && activeSection === 'about'
+                      ? 'text-white'
+                      : 'text-primary'
+                  }`}
+                >
+                  auto_awesome
+                </span>
                 <span>About Our Craft</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => scrollToSection('custom-cakes', 'customize cakes')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-on-surface hover:bg-surface-container transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-left cursor-pointer ${
+                  currentScreen === 'storefront' && activeSection === 'custom-cakes'
+                    ? 'bg-primary text-white font-bold shadow-xs'
+                    : 'font-medium text-on-surface hover:bg-surface-container'
+                }`}
               >
-                <span className="material-symbols-outlined text-base text-primary">palette</span>
+                <span
+                  className={`material-symbols-outlined text-base ${
+                    currentScreen === 'storefront' && activeSection === 'custom-cakes'
+                      ? 'text-white'
+                      : 'text-primary'
+                  }`}
+                >
+                  palette
+                </span>
                 <span>Custom Cakes</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => scrollToSection('testimonials', 'view testimonials')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-on-surface hover:bg-surface-container transition-colors text-left cursor-pointer"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors text-left cursor-pointer ${
+                  currentScreen === 'storefront' && activeSection === 'testimonials'
+                    ? 'bg-primary text-white font-bold shadow-xs'
+                    : 'font-medium text-on-surface hover:bg-surface-container'
+                }`}
               >
-                <span className="material-symbols-outlined text-base text-primary">support_agent</span>
+                <span
+                  className={`material-symbols-outlined text-base ${
+                    currentScreen === 'storefront' && activeSection === 'testimonials'
+                      ? 'text-white'
+                      : 'text-primary'
+                  }`}
+                >
+                  support_agent
+                </span>
                 <span>Testimonial</span>
               </button>
 

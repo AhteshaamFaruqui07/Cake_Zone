@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { CakeProduct, GalleryItem, GallerySectionSettings } from '../types';
 import {
   HERO_CAKE_URL,
-  INGREDIENTS_IMAGE_URL,
-  CHEFS_IMAGE_URL,
   SIGNATURE_CAKES,
   REVIEWS,
   INITIAL_GALLERY_ITEMS,
@@ -51,7 +49,13 @@ export const Storefront: React.FC<StorefrontProps> = ({
 }) => {
   const [localName, setLocalName] = useState(userName || '');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [activePolicyModal, setActivePolicyModal] = useState<'terms' | 'privacy' | null>(null);
+  const [cakeSearchQuery, setCakeSearchQuery] = useState<string>('');
+  const [cakeSortBy, setCakeSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'rating'>(
+    'featured'
+  );
+  const [activePolicyModal, setActivePolicyModal] = useState<
+    'terms' | 'privacy' | 'faq' | 'shipping' | null
+  >(null);
   const [typedWord, setTypedWord] = useState<string>('Perfection');
   const [likedInspirationIds, setLikedInspirationIds] = useState<Record<string, boolean>>({});
 
@@ -281,13 +285,36 @@ export const Storefront: React.FC<StorefrontProps> = ({
   const catalogCakes = cakes && cakes.length > 0 ? cakes : SIGNATURE_CAKES;
   const categories = ['All', 'Birthday', 'Chocolate', 'Vanilla', 'Red Velvet', 'Custom'];
 
-  const filteredCakes =
-    selectedCategory === 'All'
-      ? catalogCakes
-      : catalogCakes.filter(
-          (cake) =>
-            cake.category === selectedCategory || cake.tags.includes(selectedCategory)
-        );
+  const filteredCakes = [...catalogCakes]
+    .filter((cake) => {
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        cake.category === selectedCategory ||
+        cake.tags.includes(selectedCategory);
+      if (!matchesCategory) return false;
+
+      const q = cakeSearchQuery.trim().toLowerCase();
+      if (!q) return true;
+
+      return (
+        cake.name.toLowerCase().includes(q) ||
+        (cake.category && cake.category.toLowerCase().includes(q)) ||
+        cake.description.toLowerCase().includes(q) ||
+        (cake.ingredients && cake.ingredients.toLowerCase().includes(q)) ||
+        (cake.caption && cake.caption.toLowerCase().includes(q)) ||
+        cake.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => {
+      if (cakeSortBy === 'price-asc') return a.price - b.price;
+      if (cakeSortBy === 'price-desc') return b.price - a.price;
+      if (cakeSortBy === 'rating') {
+        const ratingDiff = (b.rating ?? 4.8) - (a.rating ?? 4.8);
+        if (Math.abs(ratingDiff) > 0.01) return ratingDiff;
+        return (b.reviewsCount ?? 90) - (a.reviewsCount ?? 90);
+      }
+      return 0;
+    });
 
   useEffect(() => {
     if (userName) {
@@ -456,29 +483,107 @@ export const Storefront: React.FC<StorefrontProps> = ({
             </p>
           </div>
 
-          {/* Category Filter Pills (Horizontally scrollable on mobile, wrapped on tablet/desktop) */}
-          <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto sm:flex-wrap pb-2 sm:pb-0 mb-7 sm:mb-9 -mx-4 px-4 sm:mx-0 sm:px-0">
-            {categories.map((category) => {
-              const isActive = selectedCategory === category;
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setSelectedCategory(category)}
-                  className={`category-glass-shine-btn px-5 sm:px-7 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-medium cursor-pointer shrink-0 whitespace-nowrap ${
-                    isActive
-                      ? 'bg-[#4E2F21] text-white border border-[#4E2F21] shadow-xs'
-                      : 'bg-[#FAF6F0]/90 text-[#2D2420] border border-[#E4DDD3] hover:border-[#4E2F21]/40 hover:bg-[#F3ECE2]/95'
-                  }`}
+          {/* Category Filter Pills + Search & Sort Controls */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 mb-7 sm:mb-9">
+            {/* Category Filter Pills (Horizontally scrollable on mobile, single row on desktop) */}
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto lg:flex-nowrap pb-1.5 lg:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 min-w-0">
+              {categories.map((category) => {
+                const isActive = selectedCategory === category;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setSelectedCategory(category)}
+                    className={`category-glass-shine-btn px-3.5 sm:px-4 xl:px-5 py-2 rounded-full text-xs sm:text-sm font-medium cursor-pointer shrink-0 whitespace-nowrap ${
+                      isActive
+                        ? 'bg-[#4E2F21] text-white border border-[#4E2F21] shadow-xs'
+                        : 'bg-[#FAF6F0]/90 text-[#2D2420] border border-[#E4DDD3] hover:border-[#4E2F21]/40 hover:bg-[#F3ECE2]/95'
+                    }`}
+                  >
+                    <span className="relative z-10">{category}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Search Bar & Sort Selector — Always in a single row */}
+            <div className="flex flex-row items-center gap-2 sm:gap-2.5 shrink-0 w-full lg:w-auto">
+              {/* Instant Search Input */}
+              <div className="relative flex-1 min-w-0 sm:w-52 xl:w-60">
+                <span className="material-symbols-outlined text-[#6E5A4F] text-[17px] sm:text-[18px] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={cakeSearchQuery}
+                  onChange={(e) => setCakeSearchQuery(e.target.value)}
+                  placeholder="Search cakes..."
+                  aria-label="Search signature cakes"
+                  className="w-full pl-9 pr-7 py-2 rounded-full bg-[#FAF6F0]/95 border border-[#E4DDD3] focus:border-[#4E2F21] focus:bg-white text-xs sm:text-sm text-[#1A1412] placeholder:text-[#8C7E75] focus:outline-none transition-colors shadow-2xs"
+                />
+                {cakeSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setCakeSearchQuery('')}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#E4DDD3]/70 hover:bg-[#D5CBBF] text-[#2D2420] flex items-center justify-center text-[11px] cursor-pointer transition-colors"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="relative flex items-center bg-[#FAF6F0]/95 border border-[#E4DDD3] hover:border-[#4E2F21]/40 rounded-full px-3 py-2 shadow-2xs shrink-0">
+                <span className="material-symbols-outlined text-[#6E5A4F] text-[16px] sm:text-[17px] mr-1 pointer-events-none">
+                  sort
+                </span>
+                <label htmlFor="storefront-cake-sort" className="hidden sm:inline text-[11px] sm:text-xs text-[#6E655F] font-medium mr-1.5 whitespace-nowrap">
+                  Sort:
+                </label>
+                <select
+                  id="storefront-cake-sort"
+                  value={cakeSortBy}
+                  onChange={(e) =>
+                    setCakeSortBy(
+                      e.target.value as 'featured' | 'price-asc' | 'price-desc' | 'rating'
+                    )
+                  }
+                  className="bg-transparent border-none text-xs sm:text-sm font-semibold text-[#2D2420] focus:outline-none cursor-pointer pr-0.5"
                 >
-                  <span className="relative z-10">{category}</span>
-                </button>
-              );
-            })}
+                  <option value="featured">Featured</option>
+                  <option value="price-asc">Price: Low to High</option>
+                  <option value="price-desc">Price: High to Low</option>
+                  <option value="rating">Top Rated (★)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           {/* Cake Cards Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          {filteredCakes.length === 0 ? (
+            <div className="bg-[#FCF9F5] rounded-2xl border border-[#EDE5DA] p-8 sm:p-12 text-center space-y-3">
+              <span className="material-symbols-outlined text-3xl text-[#8B4513]/70">cake</span>
+              <h3 className="font-headline font-bold text-base sm:text-lg text-[#1A1412]">
+                No cakes found matching your filter
+              </h3>
+              <p className="text-xs sm:text-sm text-[#5C534E] max-w-md mx-auto">
+                Try clearing your search query or switching to &ldquo;All&rdquo; categories to explore our full patisserie collection.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory('All');
+                  setCakeSearchQuery('');
+                  setCakeSortBy('featured');
+                }}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full bg-[#4E2F21] text-white text-xs font-semibold hover:bg-[#3B2217] transition-colors cursor-pointer"
+              >
+                <span>Reset Filters</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             {filteredCakes.map((cake) => (
               <div
                 key={cake.id}
@@ -546,7 +651,8 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1131,29 +1237,30 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 UNCOMPROMISING QUALITY
               </span>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-black font-headline text-on-surface leading-tight">
-                Rare &amp; Sustainably Sourced Ingredients
+                Premium Ingredients, Freshly Crafted for You
               </h2>
               <p className="text-on-surface-variant leading-relaxed text-sm sm:text-base">
-                We travel the globe to source the finest ingredients—from organic Bourbon vanilla
-                pods in Madagascar to single-origin cacao from Ecuador. Every element is selected with
-                strict adherence to flavor integrity and ethical harvesting.
+                Every cake begins with carefully selected ingredients, from rich Indian dairy and
+                farm-fresh milk to premium chocolates, fresh seasonal fruits, and aromatic natural
+                flavours. We bring together quality ingredients, authentic taste, and expert
+                craftsmanship to create delightful experiences in every bite.
               </p>
               <div className="pt-2 flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-on-surface-variant font-medium">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-base">eco</span>
-                  <span>100% Organic Flours</span>
+                  <span>Quality Ingredients</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-base">verified</span>
-                  <span>Pure French Butter</span>
+                  <span>Freshly Prepared</span>
                 </div>
               </div>
             </div>
             <div className="relative">
               <img
-                src={INGREDIENTS_IMAGE_URL}
+                src="/assets/aistudio/image_337c1866.png"
                 alt="A rustic wooden kitchen table neatly arranged with premium baking ingredients"
-                className="rounded-2xl shadow-xl object-cover w-full h-[240px] sm:h-[320px] md:h-[350px] bg-surface-container"
+                className="rounded-2xl shadow-xl object-cover object-center w-full aspect-[16/10] sm:aspect-auto sm:h-[320px] md:h-[350px] bg-surface-container"
                 loading="lazy"
               />
             </div>
@@ -1163,32 +1270,33 @@ export const Storefront: React.FC<StorefrontProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 items-center -mt-2 sm:-mt-4">
             <div className="order-2 md:order-1 relative">
               <img
-                src={CHEFS_IMAGE_URL}
+                src="/assets/aistudio/image_99edbfba.png"
                 alt="An expert master pastry chef meticulously piping intricate buttercream flowers"
-                className="rounded-2xl shadow-xl object-cover w-full h-[240px] sm:h-[320px] md:h-[350px] bg-surface-container"
+                className="rounded-2xl shadow-xl object-cover object-center w-full aspect-[16/10] sm:aspect-auto sm:h-[320px] md:h-[350px] bg-surface-container"
                 loading="lazy"
               />
             </div>
             <div className="order-1 md:order-2 space-y-4">
               <span className="text-primary font-bold text-xs sm:text-sm tracking-widest uppercase">
-                MASTER ARTISANS
+                MASTER BAKERS &amp; CAKE ARTISTS
               </span>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-black font-headline text-on-surface leading-tight">
-                Sculpted by World-Class Pastry Chefs
+                Crafted by Passionate Baking Experts
               </h2>
               <p className="text-on-surface-variant leading-relaxed text-sm sm:text-base">
-                Our brigade of master bakers and sugar artists combine classical French patisserie
-                techniques with avant-garde modern design, turning edible treats into breathtaking
-                contemporary sculptures.
+                Our skilled team of bakers and cake artists brings creativity, precision, and
+                passion to every creation. From beautifully handcrafted designs to intricate fondant
+                decorations, we transform your ideas into delicious masterpieces made to make every
+                celebration special.
               </p>
               <div className="pt-2 flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-on-surface-variant font-medium">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-base">award_star</span>
-                  <span>Parisian Culinary Guild</span>
+                  <span>Expert Baking Craftsmanship</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-base">brush</span>
-                  <span>Bespoke Sugar Sculpting</span>
+                  <span>Custom Cake Designs</span>
                 </div>
               </div>
             </div>
@@ -1203,14 +1311,15 @@ export const Storefront: React.FC<StorefrontProps> = ({
       >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center relative z-10">
           <span className="inline-block px-4 py-1.5 rounded-full bg-surface/20 backdrop-blur-sm text-on-primary font-label text-xs sm:text-sm font-bold tracking-wide">
-            BESPOKE EXPERIENCE
+            MADE JUST FOR YOU
           </span>
           <h2 className="text-2xl sm:text-4xl md:text-5xl font-black font-headline mt-5 sm:mt-6 text-on-primary leading-tight">
-            Design Your Dream Custom Cake
+            Create a Cake as Unique as Your Celebration
           </h2>
           <p className="text-on-primary-container/90 mt-3 sm:mt-4 max-w-2xl mx-auto text-sm sm:text-lg leading-relaxed">
-            Have a unique vision? Use our interactive configurator to select tiers, custom fillings,
-            color palettes, and bespoke sugar artistry for your special event.
+            Have a cake design in mind? Customize every detail, from flavours and fillings to
+            colours, tiers, and decorations. Share your inspiration and let us turn your dream cake
+            into a delicious reality.
           </p>
           <div className="mt-7 sm:mt-8">
             <button
@@ -1220,7 +1329,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               }}
               className="w-full sm:w-auto inline-block px-8 py-4 rounded-xl bg-surface text-primary font-label font-bold shadow-xl hover:bg-surface-bright transition-all transform active:scale-95 cursor-pointer"
             >
-              Launch Cake Configurator
+              Design Your Custom Cake
             </button>
           </div>
         </div>
@@ -1312,7 +1421,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
               onClick={(e) => {
                 e.preventDefault();
-                alert('FAQ: We deliver refrigerated in temperature-controlled luxury packaging across the metropolitan area.');
+                setActivePolicyModal('faq');
               }}
               href="#faq"
             >
@@ -1322,7 +1431,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
               onClick={(e) => {
                 e.preventDefault();
-                alert('Shipping Info: Same-day delivery for signature creations ordered before 11 AM.');
+                setActivePolicyModal('shipping');
               }}
               href="#shipping"
             >
@@ -1335,18 +1444,28 @@ export const Storefront: React.FC<StorefrontProps> = ({
         </div>
       </footer>
 
-      {/* Small Window Modal for Terms of Service & Privacy Policy */}
+      {/* Small Window Modal for Terms of Service, Privacy Policy, FAQ & Shipping Info */}
       {activePolicyModal && (
         <div
           role="dialog"
           aria-modal="true"
+          onClick={() => setActivePolicyModal(null)}
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="bg-surface-container-lowest max-w-md w-full p-5 sm:p-6 rounded-2xl shadow-2xl border border-outline-variant space-y-4">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-lowest max-w-md w-full p-5 sm:p-6 rounded-2xl shadow-2xl border border-outline-variant space-y-4"
+          >
             <div className="flex justify-between items-center border-b border-outline-variant/60 pb-3">
               <h3 className="text-base sm:text-lg font-bold text-on-surface">
                 <strong>
-                  {activePolicyModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+                  {activePolicyModal === 'terms'
+                    ? 'Terms of Service'
+                    : activePolicyModal === 'privacy'
+                    ? 'Privacy Policy'
+                    : activePolicyModal === 'faq'
+                    ? 'Frequently Asked Questions'
+                    : 'Shipping & Delivery Information'}
                 </strong>
               </h3>
               <button
@@ -1359,13 +1478,24 @@ export const Storefront: React.FC<StorefrontProps> = ({
             </div>
 
             <div className="max-h-64 overflow-y-auto pr-1 text-xs sm:text-sm text-on-surface-variant leading-relaxed space-y-2">
-              {activePolicyModal === 'terms' ? (
+              {activePolicyModal === 'terms' && (
                 <p>
                   By accessing and using the CakeZone website, you agree to our terms and conditions. Customers must provide accurate information when placing orders for cakes, bakery products, or custom cake designs. All orders are subject to product availability, price confirmation, and acceptance by CakeZone. Product appearance may vary slightly from displayed images. We offer home delivery and store pickup where available, subject to confirmation. Customers should contact us promptly for order cancellations, modifications, refunds, or complaints, as eligibility may depend on the order status and applicable policies. Customers are responsible for checking their order details, delivery information, and customization requests before confirmation. All website content, branding, images, and designs are protected by applicable intellectual property laws. CakeZone reserves the right to update website content and these terms as necessary. Use of the website is also subject to our Privacy Policy and applicable laws of India. For assistance, please contact CakeZone through our official support channels.
                 </p>
-              ) : (
+              )}
+              {activePolicyModal === 'privacy' && (
                 <p>
                   At CakeZone, we respect your privacy and are committed to protecting your personal information. We may collect details such as your name, phone number, email address, delivery address, and order preferences to process cake orders, manage custom cake requests, arrange home delivery or store pickup, and provide customer support. If you place an order through WhatsApp or use third-party payment services, relevant information may be processed by those platforms under their respective privacy policies. We use reasonable security measures to protect your information and do not sell personal data as a business practice. Your information may be shared with trusted service providers when necessary to fulfil orders or comply with legal obligations. We retain personal information only as long as reasonably necessary for business and legal purposes. Subject to applicable law, you may request access to, correction of, or deletion of your personal information by contacting CakeZone through our official support channels. By using our website, you acknowledge this Privacy Policy and its terms, subject to any consent required by applicable Indian law.
+                </p>
+              )}
+              {activePolicyModal === 'faq' && (
+                <p>
+                  We deliver freshly prepared cakes in temperature-controlled luxury packaging across the city. Custom cake orders can be personalized with your preferred flavours, fillings, tiers, and dietary preferences (including 100% eggless options).
+                </p>
+              )}
+              {activePolicyModal === 'shipping' && (
+                <p>
+                  Same-day chilled courier delivery is available for signature creations ordered before 11:00 AM. Bespoke and multi-tier custom cake designs are recommended to be booked at least 24 hours in advance.
                 </p>
               )}
             </div>

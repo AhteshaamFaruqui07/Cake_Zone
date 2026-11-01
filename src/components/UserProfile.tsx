@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ScreenType, CartItem } from '../types';
+import { ScreenType, CartItem, Order } from '../types';
 import { supabase } from '../supabaseClient';
 import {
   fetchUserProfile,
@@ -8,6 +8,7 @@ import {
   createSignedUrlForAppFile,
   removeFileFromAppStorage,
   syncProfileUploadedFilesInDb,
+  fetchOrders,
   ProfileUploadedFile,
 } from '../services/supabaseData';
 
@@ -47,12 +48,27 @@ export const UserProfile: React.FC<UserProfileProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(false);
 
   const fullNameInputRef = useRef<HTMLInputElement>(null);
   const formSectionRef = useRef<HTMLElement>(null);
+  const ordersSectionRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentAuthUserId, setCurrentAuthUserId] = useState<string>('');
+
+  const loadCustomerOrders = async () => {
+    setIsLoadingOrders(true);
+    try {
+      const { data } = await fetchOrders();
+      if (data) {
+        setCustomerOrders(data);
+      }
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -161,6 +177,26 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     };
 
     loadSupabaseUserDetails();
+    loadCustomerOrders();
+
+    const channel = supabase
+      .channel('customer-profile-orders-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        loadCustomerOrders();
+      })
+      .subscribe();
+
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key && e.key.includes('orders')) {
+        loadCustomerOrders();
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('storage', handleStorageSync);
+    };
   }, [user?.email]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -455,6 +491,18 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    ordersSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
+                >
+                  <span className="material-symbols-outlined text-base text-primary">
+                    local_shipping
+                  </span>
+                  <span>Track Orders ({customerOrders.length})</span>
+                </button>
+                <button
+                  type="button"
                   onClick={onLogout}
                   className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-error/30 text-error hover:bg-error/10 text-xs font-semibold transition-all cursor-pointer"
                 >
@@ -464,6 +512,196 @@ export const UserProfile: React.FC<UserProfileProps> = ({
               </div>
             </div>
           </div>
+        </section>
+
+        {/* Customer Order Tracking View */}
+        <section
+          ref={ordersSectionRef}
+          className="bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-sm p-5 sm:p-8 space-y-5"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-outline-variant/40 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-xl">local_shipping</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg sm:text-xl font-headline font-bold text-on-surface">
+                    My Order Tracking &amp; History
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold tabular-nums">
+                    {customerOrders.length} {customerOrders.length === 1 ? 'Order' : 'Orders'}
+                  </span>
+                </div>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Track your live patisserie order preparation status from kitchen to doorstep.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadCustomerOrders}
+              disabled={isLoadingOrders}
+              className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold border border-outline-variant/50 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <span
+                className={`material-symbols-outlined text-sm text-primary ${
+                  isLoadingOrders ? 'animate-spin' : ''
+                }`}
+              >
+                sync
+              </span>
+              <span>{isLoadingOrders ? 'Refreshing...' : 'Refresh Status'}</span>
+            </button>
+          </div>
+
+          {customerOrders.length === 0 ? (
+            <div className="rounded-2xl bg-surface-container-low/60 border border-outline-variant/40 p-6 sm:p-8 text-center space-y-3">
+              <span className="material-symbols-outlined text-3xl text-primary/70">
+                receipt_long
+              </span>
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-bold text-on-surface">
+                  No orders placed yet
+                </h3>
+                <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+                  Once you place a signature cake or custom cake order, your live order status (Pending, Baking, Delivered) will appear right here.
+                </p>
+              </div>
+              <div className="pt-1 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('storefront')}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">cake</span>
+                  <span>Explore Signature Cakes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenConfigurator}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-surface border border-outline-variant text-on-surface text-xs font-bold hover:bg-surface-container transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm text-primary">palette</span>
+                  <span>Design Custom Cake</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {customerOrders.map((ord) => {
+                const stepIndex =
+                  ord.status === 'Delivered' ? 3 : ord.status === 'Baking' ? 2 : 1;
+                const steps = [
+                  { idx: 1, label: 'Pending', sub: 'Order Received', icon: 'schedule' },
+                  { idx: 2, label: 'Baking', sub: 'In Patisserie Oven', icon: 'skillet' },
+                  { idx: 3, label: 'Delivered', sub: 'Ready / Handed Over', icon: 'verified' },
+                ];
+
+                return (
+                  <div
+                    key={ord.id}
+                    className="rounded-2xl bg-surface border border-outline-variant/50 p-4 sm:p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-4"
+                  >
+                    <div className="space-y-3">
+                      {/* Top Row: Order ID, Date & Live Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-xs sm:text-sm text-primary tabular-nums">
+                              {ord.id}
+                            </span>
+                            <span className="text-[11px] text-on-surface-variant tabular-nums">
+                              • {ord.date}
+                              {ord.timeOfIssue && ord.timeOfIssue !== '—'
+                                ? ` (${ord.timeOfIssue})`
+                                : ''}
+                            </span>
+                          </div>
+                          <h3 className="font-headline font-bold text-sm sm:text-base text-on-surface mt-1 leading-snug">
+                            {ord.cakeItem}
+                          </h3>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 ${
+                            ord.status === 'Delivered'
+                              ? 'bg-emerald-500/15 text-emerald-800'
+                              : ord.status === 'Baking'
+                              ? 'bg-primary/15 text-primary'
+                              : 'bg-amber-500/15 text-amber-800'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-xs">
+                            {ord.status === 'Delivered'
+                              ? 'check_circle'
+                              : ord.status === 'Baking'
+                              ? 'local_fire_department'
+                              : 'hourglass_top'}
+                          </span>
+                          <span>{ord.status}</span>
+                        </span>
+                      </div>
+
+                      {ord.cakeTypeDetail && (
+                        <p className="text-[11px] sm:text-xs text-on-surface-variant leading-relaxed line-clamp-2">
+                          {ord.cakeTypeDetail}
+                        </p>
+                      )}
+
+                      {/* 3-Step Visual Progress Tracker */}
+                      <div className="pt-2">
+                        <div className="grid grid-cols-3 gap-2 relative">
+                          {steps.map((step) => {
+                            const isCompleted = stepIndex >= step.idx;
+                            const isCurrent = stepIndex === step.idx;
+                            return (
+                              <div
+                                key={step.label}
+                                className={`rounded-xl p-2 border transition-all ${
+                                  isCurrent
+                                    ? 'bg-primary/10 border-primary/40 text-primary'
+                                    : isCompleted
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+                                    : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant opacity-65'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="material-symbols-outlined text-sm">
+                                    {isCompleted && !isCurrent ? 'check_circle' : step.icon}
+                                  </span>
+                                  <span className="text-[11px] font-bold leading-none">
+                                    {step.label}
+                                  </span>
+                                </div>
+                                <p className="text-[9.5px] mt-1 leading-tight opacity-85 truncate">
+                                  {step.sub}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer: Total Amount */}
+                    <div className="pt-3 border-t border-outline-variant/30 flex items-center justify-between text-xs">
+                      <span className="text-on-surface-variant font-medium">
+                        {ord.amount > 0 ? 'Order Total (incl. GST)' : 'Custom Cake Consultation'}
+                      </span>
+                      <span className="font-bold text-sm text-on-surface tabular-nums">
+                        {ord.amount > 0
+                          ? `₹${Number(ord.amount).toLocaleString('en-IN')}`
+                          : 'Bespoke Quote'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* Add Your Profile Form Section */}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Order,
   OrderStatus,
@@ -181,6 +181,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [activeAdminEmail, setActiveAdminEmail] = useState<string>(ADMIN_EMAILS[0]);
 
+  // Dashboard Overview timeframe filter & menu dropdown state
+  const [timeframeFilter, setTimeframeFilter] = useState<
+    'All Time' | 'Today' | 'Yesterday' | 'This Week' | 'This Month'
+  >('All Time');
+  const [showTimeframeDropdown, setShowTimeframeDropdown] = useState(false);
+  const [showDashboardMenu, setShowDashboardMenu] = useState(false);
+
+  // Logged-In Users table horizontal scroll & drawer state
+  const usersTableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [tableScrollPercent, setTableScrollPercent] = useState<number>(0);
+  const [selectedUserDrawer, setSelectedUserDrawer] = useState<LoggedInUserRecord | null>(null);
+
+  const navigateToTab = (
+    tab: 'Dashboard' | 'Orders' | 'Products' | 'Gallery' | 'Customers' | 'Settings'
+  ) => {
+    setActiveTab(tab);
+    setShowDashboardMenu(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleUsersTableScroll = () => {
+    const el = usersTableScrollRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 0) {
+      setTableScrollPercent(0);
+      return;
+    }
+    setTableScrollPercent(Math.round((el.scrollLeft / maxScroll) * 100));
+  };
+
+  const scrollUsersTableBy = (delta: number) => {
+    const el = usersTableScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: 'smooth' });
+  };
+
   const showFeedback = (msg: string) => {
     setAdminToast(msg);
     setTimeout(() => {
@@ -303,22 +340,132 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [onNavigate]);
 
   // ==========================================================================
-  // 1. SUPABASE METRICS CALCULATIONS (Total Revenue, Total Orders, Customer Satisfaction)
   // ==========================================================================
-  const totalRevenue = useMemo(() => {
-    const ordersSum = orders.reduce((acc, ord) => acc + (Number(ord.amount) || 0), 0);
-    return ordersSum;
+  // 1. SUPABASE METRICS CALCULATIONS (Total Revenue Up Till Now & By Timeframe Filter)
+  // ==========================================================================
+  const allTimeRevenue = useMemo(() => {
+    return orders.reduce((acc, ord) => acc + (Number(ord.amount) || 0), 0);
   }, [orders]);
 
-  const totalOrdersCount = orders.length;
+  const timeframeOrders = useMemo(() => {
+    if (timeframeFilter === 'All Time') {
+      return orders;
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const tomorrowStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      0,
+      0
+    );
+    const yesterdayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 1,
+      0,
+      0,
+      0,
+      0
+    );
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
+    return orders.filter((ord) => {
+      let ordDate: Date | null = null;
+      if (ord.createdAt) {
+        const d = new Date(ord.createdAt);
+        if (!isNaN(d.getTime())) ordDate = d;
+      }
+      if (!ordDate && ord.date && ord.date !== '—') {
+        const d = new Date(ord.date);
+        if (!isNaN(d.getTime())) ordDate = d;
+      }
+      if (!ordDate) return false;
+
+      if (timeframeFilter === 'Today') {
+        return ordDate >= todayStart && ordDate < tomorrowStart;
+      }
+      if (timeframeFilter === 'Yesterday') {
+        return ordDate >= yesterdayStart && ordDate < todayStart;
+      }
+      if (timeframeFilter === 'This Week') {
+        return ordDate >= weekStart && ordDate < tomorrowStart;
+      }
+      if (timeframeFilter === 'This Month') {
+        return ordDate >= monthStart && ordDate < tomorrowStart;
+      }
+      return true;
+    });
+  }, [orders, timeframeFilter]);
+
+  const totalRevenue = useMemo(() => {
+    return timeframeOrders.reduce((acc, ord) => acc + (Number(ord.amount) || 0), 0);
+  }, [timeframeOrders]);
+
+  const totalOrdersCount = timeframeOrders.length;
 
   const customerSatisfaction = useMemo(() => {
-    if (!catalogCakes || catalogCakes.length === 0) return { avg: '4.9', totalReviews: 640 };
+    if (!catalogCakes || catalogCakes.length === 0) return { avg: '4.92', totalReviews: 328 };
     const sumRatings = catalogCakes.reduce((acc, c) => acc + (Number(c.rating) || 4.8), 0);
     const totalReviews = catalogCakes.reduce((acc, c) => acc + (Number(c.reviewsCount) || 50), 0);
-    const avg = (sumRatings / catalogCakes.length).toFixed(1);
+    const avg = (sumRatings / catalogCakes.length).toFixed(2);
     return { avg, totalReviews };
   }, [catalogCakes]);
+
+  const inOvenCount = useMemo(() => {
+    return timeframeOrders.filter(
+      (o) => o.status === 'Baking' || o.status === 'Pending'
+    ).length;
+  }, [timeframeOrders]);
+
+  const activeRevenueView = useMemo(() => {
+    const labelMap: Record<typeof timeframeFilter, string> = {
+      'All Time': 'TOTAL UP TILL NOW',
+      Today: 'EARNED TODAY',
+      Yesterday: 'YESTERDAY REVENUE',
+      'This Week': 'THIS WEEK REVENUE',
+      'This Month': 'THIS MONTH REVENUE',
+    };
+
+    let percent = 72;
+    if (totalRevenue > 0) {
+      if (timeframeFilter === 'All Time') {
+        percent = 78;
+      } else {
+        percent = Math.min(
+          92,
+          Math.max(65, Math.round((totalRevenue / Math.max(1, allTimeRevenue)) * 100))
+        );
+      }
+    } else {
+      percent = 0;
+    }
+
+    return {
+      label: labelMap[timeframeFilter],
+      amount: totalRevenue,
+      percent,
+    };
+  }, [totalRevenue, allTimeRevenue, timeframeFilter]);
+
+  const TIMEFRAME_CYCLE_ORDER: Array<typeof timeframeFilter> = [
+    'All Time',
+    'Today',
+    'Yesterday',
+    'This Week',
+    'This Month',
+  ];
+
+  const handleCycleTimeframe = () => {
+    const currentIndex = TIMEFRAME_CYCLE_ORDER.indexOf(timeframeFilter);
+    const nextIndex = (currentIndex + 1) % TIMEFRAME_CYCLE_ORDER.length;
+    setTimeframeFilter(TIMEFRAME_CYCLE_ORDER[nextIndex]);
+  };
 
   // Filtered orders for Order History
   const filteredOrders = useMemo(() => {
@@ -789,7 +936,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   return (
-    <div className="bg-background text-on-background font-body min-h-screen flex flex-col">
+    <div className="bg-background text-on-background font-body min-h-screen flex flex-col w-full max-w-full overflow-x-clip pt-[57px]">
       {/* Admin Feedback Toast */}
       {adminToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-primary text-on-primary px-5 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-bold flex items-center gap-2.5 border border-white/15">
@@ -798,24 +945,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* TopNavBar (Shell) */}
-      <header className="bg-surface sticky top-0 z-40 w-full shadow-xs border-b border-outline-variant/30">
-        <div className="flex justify-between items-center px-4 sm:px-6 py-3.5 max-w-screen-2xl mx-auto w-full gap-4">
-          {/* Brand + Search */}
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => onNavigate('storefront')}
-              className="text-xl sm:text-2xl font-black text-primary tracking-tight font-headline flex items-center gap-2 cursor-pointer"
-            >
-              CakeZone
-              <span className="text-[10px] uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-primary-container text-on-primary-container font-bold">
-                Admin Panel
+      {/* TopNavBar (Shell) matching reference screenshots - Fixed on scroll */}
+      <header className="bg-white/95 backdrop-blur-md fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200/80 shadow-2xs">
+        <div className="flex justify-between items-center px-3 sm:px-6 py-2.5 max-w-screen-2xl mx-auto w-full gap-2 sm:gap-3 bg-white/95">
+          {/* Left: Back Arrow (when in sub-page) + CakeZone Brand + ADMIN PANEL pill */}
+          <div className="flex items-center gap-2 sm:gap-5 min-w-0">
+            {activeTab !== 'Dashboard' ? (
+              <button
+                type="button"
+                onClick={() => navigateToTab('Dashboard')}
+                className="w-9 h-9 rounded-full border-2 border-[#7c3aed]/40 flex items-center justify-center text-[#5b21b6] hover:bg-[#f5f3ff] transition-colors cursor-pointer shrink-0"
+                title="Back to Dashboard Overview"
+              >
+                <span className="material-symbols-outlined text-lg leading-none">arrow_back</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate('storefront')}
+                className="w-9 h-9 rounded-full border-2 border-[#7c3aed]/40 flex items-center justify-center text-[#5b21b6] hover:bg-[#f5f3ff] transition-colors cursor-pointer shrink-0"
+                title="Return to Storefront"
+              >
+                <span className="material-symbols-outlined text-lg leading-none">arrow_back</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => navigateToTab('Dashboard')}
+                className="text-xl sm:text-2xl font-black text-[#4c1d95] tracking-tight font-headline cursor-pointer"
+              >
+                CakeZone
+              </button>
+              <span className="text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#4c1d95] text-white font-extrabold shadow-2xs">
+                ADMIN PANEL
               </span>
-            </button>
-            <div className="hidden md:flex items-center gap-3 bg-surface-container-low px-4 py-2 rounded-full w-80 border border-outline-variant/40">
-              <span className="material-symbols-outlined text-outline text-sm">search</span>
+            </div>
+
+            <div className="hidden lg:flex items-center gap-2.5 bg-slate-100/90 px-3.5 py-1.5 rounded-full w-72 border border-slate-200/80">
+              <span className="material-symbols-outlined text-slate-400 text-sm">search</span>
               <input
-                className="bg-transparent border-none text-xs font-medium focus:outline-none w-full text-on-surface placeholder:text-outline"
+                className="bg-transparent border-none text-xs font-medium focus:outline-none w-full text-slate-800 placeholder:text-slate-400"
                 placeholder="Search orders, logged-in users, cakes..."
                 type="text"
                 value={searchQuery}
@@ -824,7 +995,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="text-outline hover:text-on-surface text-xs cursor-pointer"
+                  className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
                 >
                   ✕
                 </button>
@@ -832,85 +1003,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Right Actions */}
-          <div className="flex items-center gap-3 sm:gap-5">
+          {/* Right Actions: Sync button, Notifications bell, Avatar badge, Sign Out */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={loadAllSupabaseAdminData}
               disabled={isRefreshingSupabase}
-              className="px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container border border-outline-variant/50 text-xs font-bold text-primary flex items-center gap-1.5 cursor-pointer transition-all"
+              className="w-9 h-9 sm:w-auto sm:px-3.5 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 text-xs font-bold text-[#4c1d95] flex items-center justify-center gap-1.5 cursor-pointer transition-all"
               title="Sync live data from Supabase"
             >
               <span
-                className={`material-symbols-outlined text-sm ${
+                className={`material-symbols-outlined text-base ${
                   isRefreshingSupabase ? 'animate-spin' : ''
                 }`}
               >
                 sync
               </span>
               <span className="hidden sm:inline">
-                {isRefreshingSupabase ? 'Syncing...' : 'Sync Supabase'}
+                {isRefreshingSupabase ? 'Syncing...' : 'Sync'}
               </span>
             </button>
 
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative text-on-surface-variant hover:text-primary transition-colors p-1.5 rounded-full hover:bg-surface-container-low cursor-pointer"
-              >
-                <span className="material-symbols-outlined">notifications</span>
-                {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full"></span>
-                )}
-              </button>
 
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-surface rounded-2xl shadow-xl border border-outline-variant/30 p-4 z-50 space-y-3">
-                  <div className="flex justify-between items-center pb-2 border-b border-outline-variant/20">
-                    <h4 className="text-sm font-bold text-on-surface">Admin Alerts</h4>
-                    <button
-                      onClick={() => setNotifications([])}
-                      className="text-xs text-primary font-semibold hover:underline cursor-pointer"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                  {notifications.length === 0 ? (
-                    <p className="text-xs text-on-surface-variant py-2">No active notifications</p>
-                  ) : (
-                    notifications.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs text-on-surface p-2.5 rounded-xl bg-surface-container-low flex gap-2 items-start"
-                      >
-                        <span className="material-symbols-outlined text-primary text-sm mt-0.5">
-                          info
-                        </span>
-                        <span>{msg}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+            <div className="h-6 w-[1px] bg-slate-200 hidden sm:block"></div>
 
-            <div className="h-6 w-[1px] bg-outline-variant/40 hidden sm:block"></div>
-
-            {/* Profile Info */}
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs font-extrabold text-on-surface leading-tight">
-                  Admin Privilege
-                </p>
-                <p className="text-[10px] text-primary font-bold">{activeAdminEmail}</p>
+            {/* Admin Initials Badge & Current Admin Email */}
+            <div className="flex items-center gap-2.5">
+              <div className="hidden lg:flex flex-col items-end leading-tight">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Current Admin
+                </span>
+                <span className="text-xs font-bold text-slate-800">{activeAdminEmail}</span>
               </div>
-              <div className="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center font-black text-xs shadow-xs">
-                CZ
+              <div
+                className="w-9 h-9 rounded-xl bg-[#4c1d95] text-white flex items-center justify-center font-black text-xs shadow-xs"
+                title={`Current Admin: ${activeAdminEmail}`}
+              >
+                {activeAdminEmail.slice(0, 2).toUpperCase()}
               </div>
               {onLogout && (
                 <button
                   onClick={onLogout}
-                  className="ml-1 px-3 py-1.5 rounded-full border border-outline-variant/60 text-xs font-bold text-on-surface-variant hover:text-error hover:border-error/40 hover:bg-error-container/20 transition-all flex items-center gap-1 cursor-pointer"
+                  className="flex px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-all items-center gap-1 cursor-pointer"
                   title="Sign out of CakeZone"
                 >
                   <span className="material-symbols-outlined text-sm">logout</span>
@@ -923,71 +1057,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </header>
 
       {/* Main Application Container */}
-      <div className="flex-1 flex max-w-screen-2xl mx-auto w-full">
+      <div className="flex-1 flex max-w-screen-2xl mx-auto w-full min-w-0 overflow-x-hidden">
         {/* Sidebar Navigation */}
-        <aside className="w-64 hidden md:flex flex-col py-6 px-4 gap-2 bg-surface-container-low border-r border-outline-variant/30 shrink-0">
+        <aside className="w-64 hidden md:flex flex-col py-6 px-4 gap-2 bg-white border-r border-slate-200/80 shrink-0">
           <nav className="flex flex-col gap-1.5 w-full">
             <button
-              onClick={() => setActiveTab('Dashboard')}
+              onClick={() => navigateToTab('Dashboard')}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all cursor-pointer ${
                 activeTab === 'Dashboard'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  ? 'bg-[#7c3aed] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <span className="material-symbols-outlined text-lg">dashboard</span>
-              <span>All Admin Privileges</span>
+              <span className="material-symbols-outlined text-lg">grid_view</span>
+              <span>Dashboard Overview</span>
             </button>
             <button
-              onClick={() => setActiveTab('Customers')}
+              onClick={() => navigateToTab('Customers')}
               className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
                 activeTab === 'Customers'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  ? 'bg-[#4c1d95] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-lg">group</span>
-                <span>Logged-In People</span>
+                <span>Logged in user</span>
               </div>
               <span
                 className={`px-2 py-0.5 text-[11px] rounded-full font-extrabold ${
                   activeTab === 'Customers'
-                    ? 'bg-white/20 text-on-primary'
-                    : 'bg-primary-container text-on-primary-container'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-[#ede9fe] text-[#5b21b6]'
                 }`}
               >
                 {loggedInUsers.length}
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('Products')}
+              onClick={() => navigateToTab('Products')}
               className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
                 activeTab === 'Products'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  ? 'bg-[#4c1d95] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-lg">cake</span>
-                <span>Insert / Delete Items</span>
+                <span className="material-symbols-outlined text-lg">shopping_bag</span>
+                <span>Insert/delete cake item</span>
               </div>
               <span
                 className={`px-2 py-0.5 text-[11px] rounded-full font-extrabold ${
                   activeTab === 'Products'
-                    ? 'bg-white/20 text-on-primary'
-                    : 'bg-surface-container-highest text-on-surface'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 {catalogCakes.length}
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('Gallery')}
+              onClick={() => navigateToTab('Gallery')}
               className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
                 activeTab === 'Gallery'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  ? 'bg-[#4c1d95] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -997,19 +1131,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span
                 className={`px-2 py-0.5 text-[11px] rounded-full font-extrabold ${
                   activeTab === 'Gallery'
-                    ? 'bg-white/20 text-on-primary'
-                    : 'bg-surface-container-highest text-on-surface'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 {galleryList.length}
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('Orders')}
+              onClick={() => navigateToTab('Orders')}
               className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
                 activeTab === 'Orders'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  ? 'bg-[#4c1d95] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -1019,30 +1153,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span
                 className={`px-2 py-0.5 text-[11px] rounded-full font-extrabold ${
                   activeTab === 'Orders'
-                    ? 'bg-white/20 text-on-primary'
-                    : 'bg-surface-container-highest text-on-surface'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 {orders.length}
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('Settings')}
+              onClick={() => navigateToTab('Settings')}
               className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
                 activeTab === 'Settings'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                  ? 'bg-[#4c1d95] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-lg">badge</span>
-                <span>User Saved Profiles</span>
+                <span>User saved Profiles</span>
               </div>
               <span
                 className={`px-2 py-0.5 text-[11px] rounded-full font-extrabold ${
                   activeTab === 'Settings'
-                    ? 'bg-white/20 text-on-primary'
-                    : 'bg-surface-container-highest text-on-surface'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
                 }`}
               >
                 {savedProfiles.length}
@@ -1051,17 +1185,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </nav>
 
           {/* Storefront Shortcut Card */}
-          <div className="mt-auto p-4 rounded-2xl bg-surface border border-outline-variant/40 flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-on-surface font-extrabold text-sm">
-              <span className="material-symbols-outlined text-primary">storefront</span>
+          <div className="mt-auto p-4 rounded-2xl bg-[#f8f7fc] border border-slate-200/80 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-slate-900 font-extrabold text-sm">
+              <span className="material-symbols-outlined text-[#7c3aed]">storefront</span>
               <span>Live Storefront</span>
             </div>
-            <p className="text-xs text-on-surface-variant leading-relaxed">
+            <p className="text-xs text-slate-500 leading-relaxed">
               Changes to cake items and gallery designs immediately update the customer storefront.
             </p>
             <button
               onClick={() => onNavigate('storefront')}
-              className="w-full py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+              className="w-full py-2 rounded-xl bg-[#4c1d95] text-white text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
             >
               View Live Storefront →
             </button>
@@ -1069,386 +1203,951 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </aside>
 
         {/* Content Canvas */}
-        <main className="flex-1 p-4 sm:p-6 md:p-8 flex flex-col gap-8 overflow-y-auto">
-          {/* Mobile Tab Bar */}
-          <div className="flex md:hidden gap-2 overflow-x-auto pb-1">
-            {(
-              [
-                { id: 'Dashboard', label: 'All Privileges' },
-                { id: 'Customers', label: `Users (${loggedInUsers.length})` },
-                { id: 'Products', label: `Cakes (${catalogCakes.length})` },
-                { id: 'Gallery', label: `Gallery (${galleryList.length})` },
-                { id: 'Orders', label: `Orders (${orders.length})` },
-                { id: 'Settings', label: `Saved Profiles (${savedProfiles.length})` },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer ${
-                  activeTab === t.id
-                    ? 'bg-primary text-on-primary'
-                    : 'bg-surface-container-low text-on-surface-variant'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Welcome Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-black text-on-surface tracking-tight font-headline">
-                  CakeZone Admin Control Center
+        <main className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 flex flex-col gap-6 overflow-y-auto overflow-x-hidden bg-[#fbfaff]">
+          {/* =================================================================
+              1. DASHBOARD OVERVIEW PAGE (Matches Mobile Reference Structure)
+          ================================================================== */}
+          {activeTab === 'Dashboard' && (
+            <div className="max-w-3xl mx-auto w-full min-w-0 flex flex-col gap-4 sm:gap-6">
+              {/* Top Timeframe Header & Timeframe Filter Dropdown */}
+              <div className="flex items-center justify-between gap-2">
+                <h1 className="text-[28px] sm:text-4xl font-black text-slate-900 tracking-tight font-headline leading-none">
+                  {timeframeFilter}
                 </h1>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 text-[11px] font-extrabold">
-                  Full Privileges Active
-                </span>
-              </div>
-              <p className="text-on-surface-variant text-xs sm:text-sm mt-1">
-                Unified Supabase data synced across Admin accounts:{' '}
-                <span className="font-bold text-on-surface">{ADMIN_EMAILS.join(' · ')}</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <button
-                onClick={onOpenNewCustomOrder}
-                className="px-4 py-2.5 bg-surface-container-low border border-outline-variant/50 text-on-surface rounded-xl font-bold text-xs flex items-center gap-1.5 hover:bg-surface-container transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base text-primary">
-                  auto_awesome
-                </span>
-                <span>Preview Custom Cake Builder</span>
-              </button>
-            </div>
-          </div>
-
-          {/* =================================================================
-              PRIVILEGE 1A: TOP 3 METRIC CARDS (Total Revenue, Total Orders, Customer Satisfaction)
-          ================================================================== */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* 1. Total Revenue */}
-            <div className="bg-surface rounded-2xl p-6 border border-outline-variant/40 shadow-xs flex flex-col justify-between gap-4">
-              <div className="flex justify-between items-start">
-                <div className="p-3 rounded-xl bg-primary-container text-on-primary-container">
-                  <span className="material-symbols-outlined">payments</span>
-                </div>
-                <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700">
-                  Live Revenue
-                </span>
-              </div>
-              <div>
-                <p className="text-on-surface-variant text-xs font-bold uppercase tracking-wider">
-                  Total Revenue
-                </p>
-                <h3 className="text-2xl sm:text-3xl font-black text-on-surface mt-1 font-headline tabular-nums">
-                  ₹{totalRevenue.toLocaleString('en-IN')}
-                </h3>
-                <p className="text-[11px] text-on-surface-variant mt-1">
-                  Calculated from all storefront &amp; custom cake orders
-                </p>
-              </div>
-            </div>
-
-            {/* 2. Total Orders */}
-            <div className="bg-surface rounded-2xl p-6 border border-outline-variant/40 shadow-xs flex flex-col justify-between gap-4">
-              <div className="flex justify-between items-start">
-                <div className="p-3 rounded-xl bg-secondary-container text-on-secondary-container">
-                  <span className="material-symbols-outlined">shopping_bag</span>
-                </div>
-                <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-primary-container text-on-primary-container">
-                  {orders.length} Storefront · {customCakesList.length} Custom
-                </span>
-              </div>
-              <div>
-                <p className="text-on-surface-variant text-xs font-bold uppercase tracking-wider">
-                  Total Orders
-                </p>
-                <h3 className="text-2xl sm:text-3xl font-black text-on-surface mt-1 font-headline tabular-nums">
-                  {totalOrdersCount}
-                </h3>
-                <p className="text-[11px] text-on-surface-variant mt-1">
-                  Combined storefront checkouts and custom cake requests
-                </p>
-              </div>
-            </div>
-
-            {/* 3. Customer Satisfaction */}
-            <div className="bg-surface rounded-2xl p-6 border border-outline-variant/40 shadow-xs flex flex-col justify-between gap-4">
-              <div className="flex justify-between items-start">
-                <div className="p-3 rounded-xl bg-amber-500/15 text-amber-600">
-                  <span className="material-symbols-outlined">grade</span>
-                </div>
-                <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700">
-                  {customerSatisfaction.totalReviews}+ Verified Reviews
-                </span>
-              </div>
-              <div>
-                <p className="text-on-surface-variant text-xs font-bold uppercase tracking-wider">
-                  Customer Satisfaction
-                </p>
-                <h3 className="text-2xl sm:text-3xl font-black text-on-surface mt-1 font-headline tabular-nums">
-                  {customerSatisfaction.avg}/5.0 ★
-                </h3>
-                <p className="text-[11px] text-on-surface-variant mt-1">
-                  Average rating across {catalogCakes.length} signature cakes
-                </p>
-              </div>
-            </div>
-          </div>
-
-
-          {/* =================================================================
-              PRIVILEGE 1B: BELOW METRICS -> "TOTAL PEOPLE LOGGED IN" DETAILS
-          ================================================================== */}
-          {(activeTab === 'Dashboard' || activeTab === 'Customers') && (
-            <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-4 shadow-xs">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-xs">
-                    <span className="material-symbols-outlined">groups</span>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
-                        Total People Logged In
-                      </h2>
-                      <span className="px-3 py-0.5 rounded-full bg-primary text-on-primary text-xs font-black tabular-nums">
-                        {loggedInUsers.length} {loggedInUsers.length === 1 ? 'Person' : 'People'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-on-surface-variant">
-                      Extracted from Supabase <code className="font-mono text-primary">profiles</code> &amp; authenticated sessions
-                    </p>
-                  </div>
-                </div>
-
-                {/* Quick Add / Remove Admin Form */}
-                <form
-                  onSubmit={handleAddAdminByEmail}
-                  className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto"
-                >
-                  <input
-                    type="email"
-                    value={newAdminEmailInput}
-                    onChange={(e) => setNewAdminEmailInput(e.target.value)}
-                    placeholder="Enter email to Add or Remove Admin..."
-                    className="px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs text-on-surface focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-64"
-                  />
-                  <button
-                    type="submit"
-                    disabled={Boolean(isUpdatingRole)}
-                    className="px-3.5 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:opacity-95 transition-opacity flex items-center gap-1.5 whitespace-nowrap cursor-pointer disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-sm">admin_panel_settings</span>
-                    <span>Add Admin</span>
-                  </button>
+                <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={handleRemoveAdminByEmail}
-                    disabled={Boolean(isUpdatingRole)}
-                    className="px-3 py-2 rounded-xl border border-error/40 text-error hover:bg-error/10 text-xs font-bold transition-colors flex items-center gap-1 whitespace-nowrap cursor-pointer disabled:opacity-50"
+                    onClick={() => setShowTimeframeDropdown((prev) => !prev)}
+                    className="px-3.5 py-1.5 rounded-full bg-[#f3e8ff] hover:bg-[#e9d5ff] text-[#6d28d9] text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-sm">person_remove</span>
-                    <span>Remove Admin</span>
+                    <span>{timeframeFilter}</span>
+                    <span className="material-symbols-outlined text-base leading-none">
+                      expand_more
+                    </span>
                   </button>
+                  {showTimeframeDropdown && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-30">
+                      {(
+                        [
+                          { value: 'All Time', label: 'All Time (Up Till Now)' },
+                          { value: 'Today', label: 'Today' },
+                          { value: 'Yesterday', label: 'Yesterday' },
+                          { value: 'This Week', label: 'This Week' },
+                          { value: 'This Month', label: 'This Month' },
+                        ] as const
+                      ).map((tf) => (
+                        <button
+                          key={tf.value}
+                          type="button"
+                          onClick={() => {
+                            setTimeframeFilter(tf.value);
+                            setShowTimeframeDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-xs font-bold flex items-center justify-between cursor-pointer ${
+                            timeframeFilter === tf.value
+                              ? 'bg-[#f5f3ff] text-[#6d28d9]'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{tf.label}</span>
+                          {timeframeFilter === tf.value && (
+                            <span className="material-symbols-outlined text-sm">check</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Overview / Menu Pill Button with Navigation Dropdown */}
+              <div className="relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowDashboardMenu((prev) => !prev)}
+                  className="px-4 py-1.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm sm:text-base">grid_view</span>
+                  <span>Menu</span>
+                </button>
+
+                {showDashboardMenu && (
+                  <div className="absolute left-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-30 flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Dashboard')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold bg-[#f5f3ff] text-[#6d28d9] flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base">grid_view</span>
+                        <span>Overview</span>
+                      </span>
+                      <span className="material-symbols-outlined text-sm">check</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Customers')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base text-[#7c3aed]">
+                          group
+                        </span>
+                        <span>Logged in user</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                        {loggedInUsers.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Products')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base text-[#7c3aed]">
+                          shopping_bag
+                        </span>
+                        <span>Insert/delete cake item</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                        {catalogCakes.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Gallery')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base text-[#7c3aed]">
+                          photo_library
+                        </span>
+                        <span>Inspiration Gallery</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                        {galleryList.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Orders')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base text-[#7c3aed]">
+                          receipt_long
+                        </span>
+                        <span>Order History</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                        {orders.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Settings')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base text-[#7c3aed]">
+                          badge
+                        </span>
+                        <span>User saved Profiles</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                        {savedProfiles.length}
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* HERO CARD: Total Revenue with Circular Ring & 3 Interactive Navigation Rows */}
+              <div className="bg-white rounded-[28px] p-5 sm:p-8 shadow-sm border border-slate-100 flex flex-col gap-4 sm:gap-6 w-full min-w-0 overflow-hidden">
+                <div className="flex items-start justify-between gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-headline leading-tight">
+                      Total Revenue
+                    </h2>
+                    <p className="text-[11px] sm:text-sm text-slate-400 font-medium mt-1 leading-snug">
+                      Target = Projected - Completed + In
+                      <br className="sm:hidden" /> Oven
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCycleTimeframe}
+                    className="px-3.5 py-1.5 rounded-2xl bg-[#faf5ff] hover:bg-[#f3e8ff] border border-[#f3e8ff] text-[#7c3aed] text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider leading-tight text-left shrink-0 cursor-pointer transition-colors"
+                  >
+                    TAP TO
+                    <br />
+                    CYCLE
+                  </button>
+                </div>
+
+                {/* Ring Gauge (Left) + 3 Clickable Navigation Metrics (Right) - Side-by-Side on Mobile & Desktop */}
+                <div className="grid grid-cols-12 items-center gap-2 sm:gap-4 py-1 sm:py-2 w-full min-w-0">
+                  {/* Left Circular Progress Ring */}
+                  <div className="col-span-6 sm:col-span-7 flex items-center justify-center select-none min-w-0">
+                    <div className="relative w-[138px] h-[138px] sm:w-56 sm:h-56 max-w-full aspect-square flex items-center justify-center">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200">
+                        <defs>
+                          <linearGradient id="cakezoneRevGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#a855f7" />
+                            <stop offset="50%" stopColor="#9333ea" />
+                            <stop offset="100%" stopColor="#6d28d9" />
+                          </linearGradient>
+                        </defs>
+                        {/* Background Track */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="80"
+                          fill="none"
+                          stroke="#f3e8ff"
+                          strokeWidth="16"
+                        />
+                        {/* Animated Value Ring */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="80"
+                          fill="none"
+                          stroke="url(#cakezoneRevGrad)"
+                          strokeWidth="16"
+                          strokeLinecap="round"
+                          strokeDasharray={2 * Math.PI * 80}
+                          strokeDashoffset={
+                            2 * Math.PI * 80 * (1 - activeRevenueView.percent / 100)
+                          }
+                          className="transition-all duration-500 ease-out"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-3 sm:px-5">
+                        <span className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight tabular-nums leading-none">
+                          ₹{activeRevenueView.amount.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[8.5px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mt-1.5 leading-tight max-w-[96px] sm:max-w-[140px] break-words">
+                          {activeRevenueView.label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right 3 Interactive Metric Rows (Navigate to Dedicated Pages) */}
+                  <div className="col-span-6 sm:col-span-5 flex flex-col gap-3 sm:gap-4 min-w-0 pl-1 sm:pl-0">
+                    {/* 1. Logged in user -> navigates to Customers */}
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Customers')}
+                      className="group flex items-center gap-2.5 sm:gap-3.5 p-1 sm:p-2 rounded-2xl hover:bg-[#f5f3ff] transition-all text-left cursor-pointer w-full min-w-0"
+                    >
+                      <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#f3e8ff] text-[#7c3aed] group-hover:bg-[#7c3aed] group-hover:text-white flex items-center justify-center transition-colors shrink-0">
+                        <span className="material-symbols-outlined text-base sm:text-xl">group</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] sm:text-xs font-medium text-slate-400 group-hover:text-[#6d28d9] transition-colors leading-tight">
+                          Logged in user
+                        </p>
+                        <p className="text-sm sm:text-lg font-black text-[#7c3aed] tabular-nums leading-tight mt-0.5">
+                          {loggedInUsers.length}
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* 2. Insert/Delete cake item -> navigates to Products */}
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Products')}
+                      className="group flex items-center gap-2.5 sm:gap-3.5 p-1 sm:p-2 rounded-2xl hover:bg-[#f5f3ff] transition-all text-left cursor-pointer w-full min-w-0"
+                    >
+                      <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#f3e8ff] text-[#7c3aed] group-hover:bg-[#7c3aed] group-hover:text-white flex items-center justify-center transition-colors shrink-0">
+                        <span className="material-symbols-outlined text-base sm:text-xl">
+                          shopping_basket
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] sm:text-xs font-medium text-slate-400 group-hover:text-[#6d28d9] transition-colors leading-snug">
+                          Insert/Delete
+                          <br />
+                          cake item
+                        </p>
+                        <p className="text-sm sm:text-lg font-black text-slate-900 tabular-nums leading-tight mt-0.5">
+                          {catalogCakes.length}
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* 3. Saved User profile -> navigates to Settings */}
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Settings')}
+                      className="group flex items-center gap-2.5 sm:gap-3.5 p-1 sm:p-2 rounded-2xl hover:bg-[#fef3c7]/60 transition-all text-left cursor-pointer w-full min-w-0"
+                    >
+                      <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#fef3c7] text-[#b45309] group-hover:bg-[#d97706] group-hover:text-white flex items-center justify-center transition-colors shrink-0">
+                        <span className="material-symbols-outlined text-base sm:text-xl">
+                          account_box
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] sm:text-xs font-medium text-slate-400 group-hover:text-[#b45309] transition-colors leading-snug">
+                          Saved User
+                          <br />
+                          profile
+                        </p>
+                        <p className="text-sm sm:text-lg font-black text-slate-900 tabular-nums leading-tight mt-0.5">
+                          {savedProfiles.length}
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bottom Pagination Dots matching reference screenshot */}
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  {(['All Time', 'Today', 'Yesterday', 'This Month'] as const).map((tf, idx) => {
+                    const isActive =
+                      timeframeFilter === tf ||
+                      (timeframeFilter === 'This Week' && idx === 3);
+                    return (
+                      <button
+                        key={tf}
+                        type="button"
+                        onClick={() => setTimeframeFilter(tf)}
+                        aria-label={`View ${tf} revenue`}
+                        className={`w-2 h-2 rounded-full transition-colors cursor-pointer ${
+                          isActive ? 'bg-[#7c3aed]' : 'bg-slate-300 hover:bg-slate-400'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* MIDDLE TWO-COLUMN CARDS: Total Orders (Order History) & Satisfaction */}
+              <div className="grid grid-cols-2 gap-3.5 sm:gap-5 min-w-0">
+                {/* Left Card: Total Orders -> Navigates to Order History ('Orders') */}
+                <div
+                  onClick={() => navigateToTab('Orders')}
+                  className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:border-[#7c3aed]/40 hover:shadow-md transition-all flex flex-col justify-between gap-2.5 sm:gap-4 cursor-pointer group min-w-0"
+                >
+                  <div className="flex items-center justify-between gap-1.5 min-w-0">
+                    <h3 className="text-xs sm:text-lg font-black text-slate-900 group-hover:text-[#7c3aed] transition-colors truncate">
+                      Total Orders
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigateToTab('Orders');
+                      }}
+                      className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-[#faf5ff] group-hover:bg-[#7c3aed] text-[#7c3aed] group-hover:text-white text-[10px] sm:text-xs font-extrabold transition-colors cursor-pointer shrink-0"
+                    >
+                      View
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 sm:gap-3 my-0.5 sm:my-1 min-w-0">
+                    <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-2xs shrink-0">
+                      <span className="material-symbols-outlined text-sm sm:text-lg">
+                        trending_up
+                      </span>
+                    </div>
+                    <span className="text-2xl sm:text-4xl font-black text-slate-900 tabular-nums truncate leading-none">
+                      {totalOrdersCount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 sm:space-y-2.5 min-w-0">
+                    <p className="text-[10px] sm:text-xs font-medium text-slate-400 truncate">
+                      Target: {Math.max(180, orders.length * 20).toLocaleString('en-IN')} boxes
+                    </p>
+                    <div className="w-full h-1.5 sm:h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-rose-500 via-fuchsia-600 to-[#7c3aed]"
+                        style={{
+                          width: `${
+                            totalOrdersCount === 0
+                              ? 0
+                              : Math.min(
+                                  100,
+                                  Math.max(
+                                    25,
+                                    Math.round((totalOrdersCount / Math.max(1, orders.length)) * 85)
+                                  )
+                                )
+                          }%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between pt-0.5 min-w-0">
+                      <p className="text-[10px] sm:text-xs font-extrabold text-rose-600 truncate">
+                        {inOvenCount} In Oven / Prep
+                      </p>
+                      <span className="hidden sm:inline text-[11px] font-bold text-[#7c3aed] group-hover:underline shrink-0">
+                        Order History →
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Card: Satisfaction */}
+                <div className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 flex flex-col justify-between gap-2.5 sm:gap-4 min-w-0">
+                  <div className="flex items-center justify-between gap-1.5 min-w-0">
+                    <h3 className="text-xs sm:text-lg font-black text-slate-900 truncate">
+                      Satisfaction
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Products')}
+                      className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#faf5ff] hover:bg-[#ede9fe] text-[#7c3aed] flex items-center justify-center font-bold text-sm sm:text-lg transition-colors cursor-pointer shrink-0"
+                      title="Manage product ratings"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 sm:gap-2.5 my-0.5 sm:my-1 min-w-0">
+                    <span className="text-amber-400 text-base sm:text-2xl leading-none shrink-0">
+                      ★
+                    </span>
+                    <span className="text-xl sm:text-3xl font-black text-slate-900 tabular-nums truncate leading-none">
+                      {customerSatisfaction.avg} ★
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm font-bold text-slate-800 min-w-0">
+                    <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-emerald-500 text-emerald-600 flex items-center justify-center text-[9px] sm:text-[11px] font-black shrink-0">
+                      ✓
+                    </span>
+                    <span className="truncate">99.4% On-Time</span>
+                  </div>
+
+                  <div className="pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between gap-1 text-[10px] sm:text-xs min-w-0">
+                    <span className="text-slate-400 font-medium truncate">Total reviews</span>
+                    <span className="font-extrabold text-[#7c3aed] shrink-0">
+                      {customerSatisfaction.totalReviews} today
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* BOTTOM CARD: Inspiration Gallery -> Navigates to Inspiration Gallery ('Gallery') */}
+              <div
+                onClick={() => navigateToTab('Gallery')}
+                className="bg-white rounded-[22px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:border-[#7c3aed]/40 hover:shadow-md transition-all flex items-center justify-between gap-2 sm:gap-4 cursor-pointer group min-w-0"
+              >
+                <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+                    <h3 className="text-xs sm:text-lg font-black text-slate-900 group-hover:text-[#7c3aed] transition-colors">
+                      Inspiration Gallery
+                    </h3>
+                    <span className="px-2 sm:px-3 py-0.5 rounded-full bg-[#f3e8ff] text-[#7c3aed] text-[10px] sm:text-xs font-extrabold shrink-0">
+                      {galleryList.length} Designs
+                    </span>
+                  </div>
+                  <p className="text-[10px] sm:text-sm text-slate-400 font-medium truncate sm:whitespace-normal">
+                    Trending Bespoke Creations &amp; Moodboards
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigateToTab('Gallery');
+                  }}
+                  className="text-[11px] sm:text-sm font-extrabold text-[#7c3aed] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 sm:gap-1 shrink-0 cursor-pointer"
+                >
+                  <span>View All</span>
+                  <span className="material-symbols-outlined text-sm sm:text-base">chevron_right</span>
+                </button>
+              </div>
+
+              {/* CakeZone Admin Control Center Banner (Placed at Last) */}
+              <div className="pt-4 border-t border-slate-200/80 flex flex-col gap-2 min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-headline">
+                    CakeZone Admin Control Center
+                  </h2>
+                  <span className="px-3 py-1 rounded-full bg-[#e6f7f1] text-[#0f766e] text-xs font-extrabold tracking-tight">
+                    Full Privileges Active
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed break-words">
+                  Unified Supabase data synced across Admin accounts:{' '}
+                  <strong className="font-extrabold text-slate-800 break-all sm:break-normal">
+                    {Array.from(
+                      new Set([
+                        ...ADMIN_EMAILS,
+                        ...loggedInUsers
+                          .filter((u) => u.role === 'Admin' && u.email)
+                          .map((u) => u.email.toLowerCase()),
+                      ])
+                    ).join(' · ')}
+                  </strong>
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1 min-w-0">
+                  <span className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-2xl sm:rounded-full bg-[#f3e8ff] border border-[#d8b4fe] text-[#5b21b6] text-xs font-extrabold max-w-full break-all">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                    <span>Current Logged-In Admin:</span>{' '}
+                    <span className="underline">{activeAdminEmail}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          {/* =================================================================
+              2. LOGGED-IN USERS PAGE (Matches Image 2: Total People Logged In)
+          ================================================================== */}
+          {activeTab === 'Customers' && (
+            <div className="max-w-4xl mx-auto w-full flex flex-col gap-5">
+              {/* Top Card: Total People Logged In + Add/Remove Admin Form */}
+              <div className="bg-white rounded-[24px] p-5 sm:p-6 border border-slate-200/80 shadow-xs flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-[#4c1d95] text-white flex items-center justify-center shadow-xs shrink-0">
+                      <span className="material-symbols-outlined text-2xl">groups</span>
+                    </div>
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900 font-headline leading-tight">
+                        Total People Logged In
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Extracted from Supabase{' '}
+                        <span className="underline decoration-[#7c3aed]/50 text-[#5b21b6] font-semibold">
+                          profiles
+                        </span>{' '}
+                        &amp; sessions
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="px-3.5 py-2 rounded-2xl bg-[#4c1d95] text-white text-xs font-extrabold text-center leading-tight shrink-0 shadow-2xs">
+                    <span className="block text-sm font-black tabular-nums">
+                      {loggedInUsers.length}
+                    </span>
+                    <span>{loggedInUsers.length === 1 ? 'Person' : 'People'}</span>
+                  </div>
+                </div>
+
+                {/* Email Input + Add Admin / Remove Admin Buttons */}
+                <form onSubmit={handleAddAdminByEmail} className="flex flex-col gap-3 pt-1">
+                  <div className="relative">
+                    <span className="material-symbols-outlined text-slate-400 text-base absolute left-3.5 top-1/2 -translate-y-1/2">
+                      mail
+                    </span>
+                    <input
+                      type="email"
+                      value={newAdminEmailInput}
+                      onChange={(e) => setNewAdminEmailInput(e.target.value)}
+                      placeholder="Enter email to Add or Remove Admin..."
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:border-[#7c3aed]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="submit"
+                      disabled={Boolean(isUpdatingRole)}
+                      className="py-3 px-4 rounded-xl bg-[#4c1d95] hover:bg-[#5b21b6] text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">verified_user</span>
+                      <span>Add Admin</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveAdminByEmail}
+                      disabled={Boolean(isUpdatingRole)}
+                      className="py-3 px-4 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-base">person_remove</span>
+                      <span>Remove Admin</span>
+                    </button>
+                  </div>
                 </form>
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-outline-variant/30 bg-surface">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-outline-variant/30 bg-surface-container/60 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
-                      <th className="py-3 px-4">#</th>
-                      <th className="py-3 px-4">User / Name</th>
-                      <th className="py-3 px-4">Email ID</th>
-                      <th className="py-3 px-4">Phone No.</th>
-                      <th className="py-3 px-4">Role / Admin Access</th>
-                      <th className="py-3 px-4">City / Address</th>
-                      <th className="py-3 px-4">Last Active / Logged In</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/20 text-xs sm:text-sm">
-                    {filteredUsers.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-sm text-on-surface-variant">
-                          No logged-in user records found.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredUsers.map((u, index) => {
-                        const dt = new Date(u.lastLoginAt || '');
-                        const validDt = !isNaN(dt.getTime());
-                        const formattedLoginDate = validDt
-                          ? dt.toLocaleDateString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })
-                          : 'Today';
-                        const formattedLoginTime = validDt
-                          ? dt.toLocaleTimeString('en-IN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true,
-                            })
-                          : '';
-                        const isRootOwner =
-                          u.email.trim().toLowerCase() === PRIMARY_OWNER_ADMIN_EMAIL;
-
-                        return (
-                          <tr key={u.id} className="hover:bg-surface-container/40 transition-colors">
-                            <td className="py-3.5 px-4 font-mono text-xs text-on-surface-variant">
-                              {index + 1}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="flex items-center gap-2.5">
-                                {u.avatarUrl ? (
-                                  <img
-                                    src={u.avatarUrl}
-                                    alt={u.name}
-                                    className="w-8 h-8 rounded-full object-cover border border-outline-variant"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-primary-container/25 text-primary font-bold text-xs flex items-center justify-center uppercase">
-                                    {(u.name || 'CZ').slice(0, 2)}
-                                  </div>
-                                )}
-                                <div>
-                                  <p className="font-bold text-on-surface leading-tight">{u.name}</p>
-                                  <p className="text-[10px] font-mono text-on-surface-variant">
-                                    ID: {u.id.slice(0, 8)}...
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 font-medium text-on-surface">{u.email}</td>
-                            <td className="py-3.5 px-4 text-on-surface-variant tabular-nums">
-                              {u.phone || '—'}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                                    u.role === 'Admin'
-                                      ? 'bg-primary text-on-primary'
-                                      : 'bg-secondary-container text-on-secondary-container'
-                                  }`}
-                                >
-                                  {u.role}
-                                </span>
-                                {!isRootOwner && u.email !== '—' && (
-                                  <button
-                                    type="button"
-                                    disabled={isUpdatingRole === u.id}
-                                    onClick={() => handleToggleUserAdminRole(u)}
-                                    className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50 ${
-                                      u.role === 'Admin'
-                                        ? 'border-error/40 text-error hover:bg-error/10'
-                                        : 'border-outline-variant/60 hover:border-primary text-on-surface-variant hover:text-primary'
-                                    }`}
-                                    title={
-                                      u.role === 'Admin'
-                                        ? 'Remove from Admin and switch to Customer'
-                                        : 'Grant Admin Dashboard access'
-                                    }
-                                  >
-                                    {isUpdatingRole === u.id
-                                      ? '...'
-                                      : u.role === 'Admin'
-                                      ? 'Remove Admin'
-                                      : 'Make Admin'}
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 text-on-surface-variant">
-                              {u.city || '—'}
-                            </td>
-                            <td className="py-3.5 px-4 text-xs text-on-surface-variant tabular-nums">
-                              <span className="font-semibold text-on-surface">{formattedLoginDate}</span>
-                              {formattedLoginTime && (
-                                <span className="block text-[11px] opacity-80">
-                                  {formattedLoginTime}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {/* =================================================================
-              PRIVILEGE 2: INSERT & DELETE ITEM (Caption, Product Img, Rs, Rating, Description, Category, Servings, Ingredients)
-          ================================================================== */}
-          {(activeTab === 'Dashboard' || activeTab === 'Products') && (
-            <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-6 shadow-xs">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-outline-variant/30 pb-4">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
-                    Storefront Catalog Management
+              {/* ACTIVE SESSIONS Card */}
+              <div className="bg-white rounded-[24px] p-5 sm:p-6 border border-slate-200/80 shadow-xs flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900">
+                      ACTIVE SESSIONS
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                      Live Supabase RPC
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span>WebSocket Live</span>
                   </span>
-                  <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
-                    Insert &amp; Delete Cake Items ({catalogCakes.length} Active Items)
-                  </h2>
-                  <p className="text-xs text-on-surface-variant">
-                    Add new cakes with caption, product image (uploaded to private bucket{' '}
-                    <code className="font-mono text-primary">app-files</code> or URL), Rs price, rating, and description.
+                </div>
+
+                {/* Filter Search Input */}
+                <div className="relative">
+                  <span className="material-symbols-outlined text-slate-400 text-base absolute left-3.5 top-1/2 -translate-y-1/2">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter users by name, email, phone, city..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                  />
+                </div>
+
+                {/* Users Table */}
+                <div
+                  ref={usersTableScrollRef}
+                  onScroll={handleUsersTableScroll}
+                  className="overflow-x-auto rounded-xl border border-slate-100"
+                >
+                  <table className="w-full text-left border-collapse min-w-[680px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-[#f8f7fc] text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3 px-3.5 w-10">#</th>
+                        <th className="py-3 px-4">USER / NAME &amp; UID</th>
+                        <th className="py-3 px-4">EMAIL ID</th>
+                        <th className="py-3 px-4">PHONE NO.</th>
+                        <th className="py-3 px-4">ROLE / ADMIN ACCESS</th>
+                        <th className="py-3 px-4">CITY / ADDRESS</th>
+                        <th className="py-3 px-4">LAST ACTIVE / LOGGED IN</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
+                      {filteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                            No logged-in user records found.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredUsers.map((u, index) => {
+                          const dt = new Date(u.lastLoginAt || '');
+                          const validDt = !isNaN(dt.getTime());
+                          const formattedLoginDate = validDt
+                            ? dt.toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })
+                            : 'Today';
+                          const formattedLoginTime = validDt
+                            ? dt.toLocaleTimeString('en-IN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true,
+                              })
+                            : '';
+                          const isRootOwner =
+                            u.email.trim().toLowerCase() === PRIMARY_OWNER_ADMIN_EMAIL;
+                          const isAdminUser = u.role === 'Admin';
+                          const initials = (u.name || 'CZ')
+                            .split(' ')
+                            .map((part) => part[0])
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase();
+
+                          return (
+                            <tr
+                              key={u.id}
+                              onClick={() => setSelectedUserDrawer(u)}
+                              className="hover:bg-[#f8f7fc] transition-colors cursor-pointer"
+                            >
+                              <td className="py-4 px-3.5 font-mono text-xs text-slate-400">
+                                {index + 1}
+                              </td>
+                              <td className="py-4 px-4">
+                                <div className="flex items-center gap-3">
+                                  {u.avatarUrl ? (
+                                    <img
+                                      src={u.avatarUrl}
+                                      alt={u.name}
+                                      className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
+                                    />
+                                  ) : (
+                                    <div
+                                      className={`w-10 h-10 rounded-full font-extrabold text-xs flex items-center justify-center uppercase shrink-0 ${
+                                        isAdminUser
+                                          ? 'bg-[#4c1d95] text-white'
+                                          : 'bg-[#ede9fe] text-[#5b21b6]'
+                                      }`}
+                                    >
+                                      {initials}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="font-extrabold text-slate-900 leading-tight">
+                                        {u.name}
+                                      </p>
+                                      {isAdminUser && (
+                                        <span
+                                          className="material-symbols-outlined text-[#6d28d9] text-sm"
+                                          title="Verified Admin"
+                                        >
+                                          verified
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                                      ID: {u.id.slice(0, 10)}...
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 px-4 font-mono text-xs sm:text-sm text-slate-700">
+                                {u.email}
+                              </td>
+                              <td className="py-4 px-4 text-slate-600 tabular-nums">
+                                {u.phone || '—'}
+                              </td>
+                              <td
+                                className="py-4 px-4"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                      isAdminUser
+                                        ? 'bg-[#4c1d95] text-white'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}
+                                  >
+                                    {u.role}
+                                  </span>
+                                  {!isRootOwner && u.email !== '—' && (
+                                    <button
+                                      type="button"
+                                      disabled={isUpdatingRole === u.id}
+                                      onClick={() => handleToggleUserAdminRole(u)}
+                                      className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50 ${
+                                        isAdminUser
+                                          ? 'border-rose-200 text-rose-600 hover:bg-rose-50'
+                                          : 'border-slate-200 hover:border-[#7c3aed] text-slate-600 hover:text-[#7c3aed]'
+                                      }`}
+                                    >
+                                      {isUpdatingRole === u.id
+                                        ? '...'
+                                        : isAdminUser
+                                        ? 'Remove Admin'
+                                        : 'Make Admin'}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-4 px-4 text-slate-600">{u.city || '—'}</td>
+                              <td className="py-4 px-4 text-xs text-slate-500 tabular-nums">
+                                <span className="font-bold text-slate-800">
+                                  {formattedLoginDate}
+                                </span>
+                                {formattedLoginTime && (
+                                  <span className="block text-[11px] text-slate-400">
+                                    {formattedLoginTime}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Horizontal Table Navigation Bar (Matches Image 2) */}
+                <div className="bg-[#f8f7fc] rounded-2xl p-3.5 border border-slate-200/70 space-y-2.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-extrabold text-slate-700 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm text-[#6d28d9]">
+                        view_column
+                      </span>
+                      <span>Horizontal Table Navigation</span>
+                    </span>
+                    <span className="font-mono text-slate-400">
+                      {tableScrollPercent}% Scrolled (Col 1 to 7)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => scrollUsersTableBy(-220)}
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 cursor-pointer shrink-0"
+                      aria-label="Scroll table left"
+                    >
+                      <span className="material-symbols-outlined text-sm">chevron_left</span>
+                    </button>
+                    <div className="flex-1 h-2.5 rounded-full bg-slate-200/80 overflow-hidden p-0.5">
+                      <div
+                        className="h-full rounded-full bg-slate-400 transition-all duration-200"
+                        style={{
+                          width: `${Math.max(25, Math.min(100, 25 + tableScrollPercent * 0.75))}%`,
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => scrollUsersTableBy(220)}
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 cursor-pointer shrink-0"
+                      aria-label="Scroll table right"
+                    >
+                      <span className="material-symbols-outlined text-sm">chevron_right</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Footer Status Line */}
+                <div className="pt-1 space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>
+                      Showing {filteredUsers.length} of {loggedInUsers.length} Users
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Click any row to open Order &amp; Permissions Drawer
                   </p>
                 </div>
               </div>
 
-              {/* Insert New Cake Item Form */}
+              {/* Selected User Order & Permissions Drawer Modal */}
+              {selectedUserDrawer && (
+                <div className="bg-white rounded-[24px] p-5 sm:p-6 border-2 border-[#7c3aed]/30 shadow-lg space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#4c1d95] text-white font-black text-xs flex items-center justify-center uppercase">
+                        {(selectedUserDrawer.name || 'CZ').slice(0, 2)}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900">
+                          {selectedUserDrawer.name} — Permissions &amp; Session Details
+                        </h4>
+                        <p className="text-xs text-slate-500">{selectedUserDrawer.email}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUserDrawer(null)}
+                      className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <span className="text-slate-400 font-bold uppercase text-[10px] block">
+                        User UID
+                      </span>
+                      <span className="font-mono text-slate-800 break-all">
+                        {selectedUserDrawer.id}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <span className="text-slate-400 font-bold uppercase text-[10px] block">
+                        Phone &amp; City
+                      </span>
+                      <span className="font-bold text-slate-800">
+                        {selectedUserDrawer.phone || '—'} · {selectedUserDrawer.city || '—'}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                      <div>
+                        <span className="text-slate-400 font-bold uppercase text-[10px] block">
+                          Current Role
+                        </span>
+                        <span className="font-black text-[#4c1d95]">
+                          {selectedUserDrawer.role}
+                        </span>
+                      </div>
+                      {selectedUserDrawer.email.trim().toLowerCase() !==
+                        PRIMARY_OWNER_ADMIN_EMAIL && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserAdminRole(selectedUserDrawer)}
+                          className="px-3 py-1.5 rounded-lg bg-[#4c1d95] text-white font-bold text-xs cursor-pointer"
+                        >
+                          Toggle Role
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* =================================================================
+              3. INSERT & DELETE CAKE ITEM PAGE (Matches Image 3: Storefront Catalog Management)
+          ================================================================== */}
+          {activeTab === 'Products' && (
+            <div className="max-w-7xl mx-auto w-full flex flex-col gap-6">
+              {/* Page Heading matching Image 3 */}
+              <div>
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#5b21b6]">
+                  STOREFRONT CATALOG MANAGEMENT
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 font-headline mt-0.5 leading-tight">
+                  Insert &amp; Delete Cake Items ({catalogCakes.length} Active Items)
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                  Add new cakes with caption, product image (uploaded to private bucket{' '}
+                  <code className="font-mono text-[#6d28d9]">app-files</code> or URL), Rs price, rating, and description.
+                </p>
+              </div>
+
+              {/* Insert New Cake Item Form Card (Matches Image 3) */}
               <form
                 onSubmit={handleInsertProduct}
-                className="bg-surface rounded-2xl p-4 sm:p-5 border border-outline-variant/40 space-y-4"
+                className="bg-white rounded-[28px] p-5 sm:p-7 border border-slate-200/80 shadow-xs space-y-4"
               >
-                <h3 className="text-sm font-bold text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-base">add_circle</span>
+                <h3 className="text-sm sm:text-base font-extrabold text-[#4c1d95] flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-[#f3e8ff] text-[#6d28d9] flex items-center justify-center text-sm font-black">
+                    +
+                  </span>
                   <span>Insert New Cake Item into Storefront</span>
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Cake Name */}
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Cake Name / Title *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newCakeName}
-                      onChange={(e) => setNewCakeName(e.target.value)}
-                      placeholder="e.g. Belgian Hazelnut Praline"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
+                {/* Cake Name / Title */}
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                    Cake Name / Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newCakeName}
+                    onChange={(e) => setNewCakeName(e.target.value)}
+                    placeholder="e.g. Belgian Hazelnut Praline"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                  />
+                </div>
 
-                  {/* Caption / Badge */}
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Caption / Highlight Tag *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newCakeCaption}
-                      onChange={(e) => setNewCakeCaption(e.target.value)}
-                      placeholder="e.g. Best Seller / Chef Special"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
+                {/* Caption / Highlight Tag */}
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                    Caption / Highlight Tag *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newCakeCaption}
+                    onChange={(e) => setNewCakeCaption(e.target.value)}
+                    placeholder="Best Seller"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                  />
+                </div>
 
-                  {/* Price in Rs (₹) */}
+                {/* 3-Column Row: Price, Rating, Reviews */}
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
+                    <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                       Price (Rs / ₹) *
                     </label>
                     <input
@@ -1457,47 +2156,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       required
                       value={newCakePrice}
                       onChange={(e) => setNewCakePrice(e.target.value)}
-                      placeholder="e.g. 999"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="999"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
                     />
                   </div>
-
-                  {/* Rating & Reviews */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface mb-1">
-                        Rating (★) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="1"
-                        max="5"
-                        required
-                        value={newCakeRating}
-                        onChange={(e) => setNewCakeRating(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-on-surface mb-1">
-                        Reviews
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={newCakeReviewsCount}
-                        onChange={(e) => setNewCakeReviewsCount(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                      Rating (★) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      max="5"
+                      required
+                      value={newCakeRating}
+                      onChange={(e) => setNewCakeRating(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                      Reviews
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newCakeReviewsCount}
+                      onChange={(e) => setNewCakeReviewsCount(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                    />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Category */}
+                {/* 2-Column Row: Category & Servings / Weight */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
+                    <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                       Category
                     </label>
                     <select
@@ -1505,7 +2200,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={(e) =>
                         setNewCakeCategory(e.target.value as CakeProduct['category'])
                       }
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
                     >
                       <option value="Chocolate">Chocolate</option>
                       <option value="Birthday">Birthday</option>
@@ -1514,142 +2209,138 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <option value="Custom">Custom</option>
                     </select>
                   </div>
-
-                  {/* Servings */}
                   <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
+                    <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                       Servings / Weight
                     </label>
                     <input
                       type="text"
                       value={newCakeServings}
                       onChange={(e) => setNewCakeServings(e.target.value)}
-                      placeholder="e.g. 8 - 10 Servings (1 Kg)"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="8 - 10 Servings"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
                     />
                   </div>
+                </div>
 
-                  {/* Ingredients */}
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Key Ingredients
+                {/* Key Ingredients */}
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                    Key Ingredients
+                  </label>
+                  <input
+                    type="text"
+                    value={newCakeIngredients}
+                    onChange={(e) => setNewCakeIngredients(e.target.value)}
+                    placeholder="e.g. Belgian dark chocolate, French butter..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                  />
+                </div>
+
+                {/* Product Image Upload + URL */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-extrabold text-slate-800">
+                    Product Image (Upload to Supabase Storage &quot;app-files&quot; or Paste Image URL)
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <label className="px-4 py-3 rounded-xl bg-[#4c1d95] hover:bg-[#5b21b6] text-white text-xs font-extrabold cursor-pointer transition-colors shrink-0 flex items-center justify-center gap-2 shadow-2xs">
+                      <span className="material-symbols-outlined text-base">upload_file</span>
+                      <span>Upload Product Image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProductImageSelect}
+                        className="hidden"
+                      />
                     </label>
                     <input
                       type="text"
-                      value={newCakeIngredients}
-                      onChange={(e) => setNewCakeIngredients(e.target.value)}
-                      placeholder="e.g. Belgian dark chocolate, French butter..."
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={newCakeImageUrl}
+                      onChange={(e) => setNewCakeImageUrl(e.target.value)}
+                      placeholder="Or paste image URL..."
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
                     />
                   </div>
-                </div>
-
-                {/* Product Image Upload ("app-files" Supabase Storage) OR Image URL + Description */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-on-surface">
-                      Product Image (Upload to Supabase Storage &quot;app-files&quot; or Paste Image URL)
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <label className="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary-container text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity shrink-0 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-sm">upload_file</span>
-                        <span>Upload Product Image</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleProductImageSelect}
-                          className="hidden"
-                        />
-                      </label>
-                      <input
-                        type="text"
-                        value={newCakeImageUrl}
-                        onChange={(e) => setNewCakeImageUrl(e.target.value)}
-                        placeholder="Or paste image URL (/assets/... or https://...)"
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                  {(newCakeImagePreview || newCakeImageUrl) && (
+                    <div className="flex items-center gap-3 pt-1">
+                      <img
+                        src={newCakeImagePreview || newCakeImageUrl}
+                        alt="Preview"
+                        className="w-12 h-12 rounded-xl object-cover border border-slate-200"
                       />
+                      <span className="text-[11px] text-emerald-700 font-bold">
+                        {newCakeImageFile
+                          ? `Ready to upload "${newCakeImageFile.name}" to app-files`
+                          : 'Using provided image URL'}
+                      </span>
                     </div>
-                    {(newCakeImagePreview || newCakeImageUrl) && (
-                      <div className="flex items-center gap-3 pt-1">
-                        <img
-                          src={newCakeImagePreview || newCakeImageUrl}
-                          alt="Preview"
-                          className="w-12 h-12 rounded-lg object-cover border border-outline-variant"
-                        />
-                        <span className="text-[11px] text-emerald-700 font-semibold">
-                          {newCakeImageFile
-                            ? `Ready to upload "${newCakeImageFile.name}" to app-files`
-                            : 'Using provided image URL'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Product Description *
-                    </label>
-                    <textarea
-                      rows={3}
-                      required
-                      value={newCakeDescription}
-                      onChange={(e) => setNewCakeDescription(e.target.value)}
-                      placeholder="Describe the flavor profile, sponge layers, ganache, and finishing..."
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
+                  )}
                 </div>
 
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="submit"
-                    disabled={isInsertingProduct}
-                    className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-sm hover:opacity-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-sm">add_shopping_cart</span>
-                    <span>
-                      {isInsertingProduct ? 'Uploading & Inserting...' : 'Insert Item into Catalog'}
-                    </span>
-                  </button>
+                {/* Product Description */}
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                    Product Description *
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={newCakeDescription}
+                    onChange={(e) => setNewCakeDescription(e.target.value)}
+                    placeholder="Describe the flavor profile, sponge layers, ganache, and finishing..."
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/40 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/30 focus:bg-white"
+                  />
                 </div>
+
+                <button
+                  type="submit"
+                  disabled={isInsertingProduct}
+                  className="w-full py-3.5 px-6 rounded-xl bg-[#4c1d95] hover:bg-[#5b21b6] text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base">add_shopping_cart</span>
+                  <span>
+                    {isInsertingProduct ? 'Uploading & Inserting...' : 'Insert Item into Catalog'}
+                  </span>
+                </button>
               </form>
 
-              {/* Current Products Grid with Update & Delete Privilege */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Catalog Cake Items Stack / Cards matching Image 3 */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5 w-full min-w-0">
                 {catalogCakes.map((cake) => {
                   const isEditingThis = editingProductId === cake.id;
                   return (
                     <div
                       key={cake.id}
-                      className="bg-surface rounded-2xl border border-outline-variant/40 overflow-hidden flex flex-col justify-between shadow-2xs hover:shadow-md transition-all p-2.5"
+                      className="bg-white rounded-2xl sm:rounded-[24px] border border-slate-200/80 overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md transition-all p-2.5 sm:p-4 min-w-0"
                     >
                       <div>
-                        <div className="relative rounded-xl overflow-hidden aspect-[1.2/1] bg-surface-container">
+                        <div className="relative rounded-xl sm:rounded-2xl overflow-hidden aspect-[16/10] bg-slate-100">
                           <img
                             src={cake.image}
                             alt={cake.name}
                             className="w-full h-full object-cover"
                           />
-                          <span className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-bold uppercase tracking-wider">
+                          <span className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-black/80 text-white text-[8.5px] sm:text-[10px] font-extrabold uppercase tracking-wider truncate max-w-[62%]">
                             {cake.caption || cake.tags?.[1] || cake.category}
                           </span>
-                          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-black">
+                          <span className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-400 text-slate-950 text-[9.5px] sm:text-[11px] font-black shadow-2xs shrink-0">
                             ★ {(cake.rating ?? 4.8).toFixed(1)}
                           </span>
                         </div>
-                        <div className="pt-3 px-1">
+
+                        <div className="pt-2.5 sm:pt-4 px-0.5 sm:px-1">
                           {isEditingThis ? (
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 sm:space-y-2">
                               <input
                                 type="text"
                                 value={editingProductDraft.name}
                                 onChange={(e) =>
                                   setEditingProductDraft((d) => ({ ...d, name: e.target.value }))
                                 }
-                                className="w-full px-2 py-1 rounded border border-outline-variant text-xs font-bold"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold"
                                 placeholder="Cake Name"
                               />
-                              <div className="grid grid-cols-2 gap-1.5">
+                              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                                 <input
                                   type="number"
                                   value={editingProductDraft.price}
@@ -1659,7 +2350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       price: Number(e.target.value),
                                     }))
                                   }
-                                  className="w-full px-2 py-1 rounded border border-outline-variant text-xs font-bold text-primary"
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-[#4c1d95]"
                                   placeholder="Price ₹"
                                 />
                                 <input
@@ -1671,7 +2362,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       caption: e.target.value,
                                     }))
                                   }
-                                  className="w-full px-2 py-1 rounded border border-outline-variant text-xs"
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
                                   placeholder="Caption"
                                 />
                               </div>
@@ -1684,23 +2375,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     description: e.target.value,
                                   }))
                                 }
-                                className="w-full px-2 py-1 rounded border border-outline-variant text-[11px]"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs"
                               />
                             </div>
                           ) : (
                             <>
-                              <div className="flex items-start justify-between gap-2">
-                                <h4 className="font-bold text-sm text-on-surface line-clamp-1">
+                              <div className="flex items-start justify-between gap-1.5 sm:gap-2 min-w-0">
+                                <h4 className="font-black text-xs sm:text-base text-slate-900 leading-tight line-clamp-1">
                                   {cake.name}
                                 </h4>
-                                <span className="font-black text-sm text-primary shrink-0 tabular-nums">
+                                <span className="font-black text-xs sm:text-base text-[#4c1d95] shrink-0 tabular-nums leading-tight">
                                   ₹{Number(cake.price).toLocaleString('en-IN')}
                                 </span>
                               </div>
-                              <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-2">
+                              <p className="text-[10px] sm:text-xs text-slate-500 mt-1 line-clamp-2 leading-snug sm:leading-relaxed">
                                 {cake.description}
                               </p>
-                              <p className="text-[10px] text-on-surface-variant/80 mt-1 font-medium">
+                              <p className="text-[9.5px] sm:text-[11px] text-slate-400 mt-1 sm:mt-1.5 font-semibold truncate">
                                 {cake.category} · {cake.servings}
                               </p>
                             </>
@@ -1708,20 +2399,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="pt-3 mt-2 border-t border-outline-variant/20 flex justify-between items-center px-1 gap-1.5">
+                      <div className="pt-2.5 sm:pt-4 mt-2 sm:mt-3 border-t border-slate-100 grid grid-cols-2 gap-1.5 sm:gap-2.5">
                         {isEditingThis ? (
                           <>
                             <button
                               type="button"
                               onClick={() => handleSaveUpdateProduct(cake.id)}
-                              className="px-2.5 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
+                              className="py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-[#4c1d95] text-white text-[11px] sm:text-xs font-extrabold cursor-pointer"
                             >
                               Save
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingProductId(null)}
-                              className="px-2.5 py-1.5 rounded-lg border border-outline-variant text-xs font-semibold cursor-pointer"
+                              className="py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border border-slate-200 text-[11px] sm:text-xs font-bold text-slate-600 cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -1731,7 +2422,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => handleStartEditProduct(cake)}
-                              className="px-2.5 py-1.5 rounded-lg bg-primary-container/20 text-primary hover:bg-primary-container/35 text-xs font-bold transition-colors cursor-pointer"
+                              className="py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-[#f3e8ff] hover:bg-[#e9d5ff] text-[#5b21b6] text-[11px] sm:text-xs font-extrabold transition-colors cursor-pointer"
                             >
                               Edit
                             </button>
@@ -1739,10 +2430,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               type="button"
                               disabled={deletingProductId === cake.id}
                               onClick={() => handleDeleteProduct(cake)}
-                              className="px-3 py-1.5 rounded-lg bg-error/10 text-error hover:bg-error hover:text-on-error text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              className="py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] sm:text-xs font-extrabold transition-colors flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer disabled:opacity-50 min-w-0"
                             >
-                              <span className="material-symbols-outlined text-xs">delete</span>
-                              <span>{deletingProductId === cake.id ? 'Deleting...' : 'Delete'}</span>
+                              <span className="material-symbols-outlined text-xs sm:text-sm shrink-0">delete</span>
+                              <span className="truncate">{deletingProductId === cake.id ? 'Deleting...' : 'Delete'}</span>
                             </button>
                           </>
                         )}
@@ -1751,88 +2442,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   );
                 })}
               </div>
-            </section>
+            </div>
           )}
 
           {/* =================================================================
               PRIVILEGE 2B: INSPIRATION GALLERY MANAGEMENT (Supabase `gallery_items` & `gallery_settings`)
           ================================================================== */}
-          {(activeTab === 'Dashboard' || activeTab === 'Gallery') && (
-            <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-6 shadow-xs">
+          {activeTab === 'Gallery' && (
+            <section className="bg-surface-container-low rounded-2xl p-3 sm:p-6 border border-outline-variant/40 flex flex-col gap-5 sm:gap-6 shadow-xs overflow-hidden">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-outline-variant/30 pb-4">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
-                    Supabase Gallery Studio (`gallery_items` &amp; `gallery_settings` with RLS `auth.uid()`)
-                  </span>
                   <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
                     Explore Our Design Inspiration Gallery ({galleryList.length} Items)
                   </h2>
-                  <p className="text-xs text-on-surface-variant">
-                    Manage section heading, sub-heading, description, create new gallery items, upload cake images to Supabase Storage, update, and delete items.
-                  </p>
                 </div>
               </div>
-
-              {/* Section Header Form (`gallery_settings`) */}
-              <form
-                onSubmit={handleSaveGalleryHeaderAdmin}
-                className="bg-surface rounded-2xl p-4 sm:p-5 border border-outline-variant/40 space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-primary flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base">title</span>
-                    <span>Gallery Section Header (`gallery_settings`)</span>
-                  </h3>
-                  <button
-                    type="submit"
-                    disabled={isSavingGalleryHeader}
-                    className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:opacity-95 transition-opacity cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingGalleryHeader ? 'Saving...' : 'Save Section Header'}
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Main Heading
-                    </label>
-                    <input
-                      type="text"
-                      value={galleryHeader.heading}
-                      onChange={(e) =>
-                        setGalleryHeader((prev) => ({ ...prev, heading: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Highlighted Sub-Heading
-                    </label>
-                    <input
-                      type="text"
-                      value={galleryHeader.subHeading}
-                      onChange={(e) =>
-                        setGalleryHeader((prev) => ({ ...prev, subHeading: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-primary font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-on-surface mb-1">
-                      Section Description
-                    </label>
-                    <input
-                      type="text"
-                      value={galleryHeader.description}
-                      onChange={(e) =>
-                        setGalleryHeader((prev) => ({ ...prev, description: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface"
-                    />
-                  </div>
-                </div>
-              </form>
 
               {/* Create New Gallery Item Form (`gallery_items` + `app-files` Storage) */}
               <form
@@ -1903,8 +2527,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <label className="block text-xs font-bold text-on-surface">
                       Cake Image (Upload to Supabase Storage &quot;app-files&quot; or Paste URL)
                     </label>
-                    <div className="flex items-center gap-3">
-                      <label className="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary-container text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity shrink-0 flex items-center gap-1.5">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
+                      <label className="px-3.5 py-2.5 sm:py-2 rounded-xl bg-primary-container text-on-primary-container text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity shrink-0 flex items-center justify-center gap-1.5">
                         <span className="material-symbols-outlined text-sm">upload_file</span>
                         <span>Upload Cake Image</span>
                         <input
@@ -1957,7 +2581,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="submit"
                     disabled={isInsertingGalleryItem}
-                    className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-sm hover:opacity-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-sm hover:opacity-95 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <span className="material-symbols-outlined text-sm">add_circle</span>
                     <span>
@@ -1969,17 +2593,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </form>
 
-              {/* Current Gallery Items Grid with Update & Delete */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Current Gallery Items Grid with Update & Delete - 2 Designs in a Row on Mobile */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
                 {galleryList.map((item) => {
                   const isEditingThis = editingGalleryId === item.id;
                   return (
                     <div
                       key={item.id}
-                      className="bg-surface rounded-2xl border border-outline-variant/40 overflow-hidden flex flex-col justify-between shadow-2xs hover:shadow-md transition-all p-2.5"
+                      className="bg-surface rounded-xl sm:rounded-2xl border border-outline-variant/40 overflow-hidden flex flex-col justify-between shadow-2xs hover:shadow-md transition-all p-2 sm:p-3 min-w-0"
                     >
                       <div>
-                        <div className="relative rounded-xl overflow-hidden aspect-[1.2/1] bg-surface-container">
+                        <div className="relative rounded-lg sm:rounded-xl overflow-hidden aspect-[1.2/1] bg-surface-container">
                           <img
                             src={
                               isEditingThis && editingGalleryPreview
@@ -1989,15 +2613,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             alt={item.title}
                             className="w-full h-full object-cover"
                           />
-                          <span className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-bold uppercase tracking-wider">
+                          <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 px-2 sm:px-2.5 py-0.5 rounded-full bg-black/75 text-white text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider truncate max-w-[62%]">
                             {item.category}
                           </span>
-                          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-primary text-on-primary text-[10px] font-bold">
+                          <span className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 px-1.5 sm:px-2 py-0.5 rounded-full bg-primary text-on-primary text-[8.5px] sm:text-[10px] font-bold shrink-0">
                             Row {item.rowNumber}
                           </span>
                         </div>
 
-                        <div className="pt-3 px-1">
+                        <div className="pt-2 sm:pt-3 px-0.5 sm:px-1">
                           {isEditingThis ? (
                             <div className="space-y-1.5">
                               <input
@@ -2006,7 +2630,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 onChange={(e) =>
                                   setEditingGalleryDraft((d) => ({ ...d, title: e.target.value }))
                                 }
-                                className="w-full px-2 py-1 rounded border border-outline-variant text-xs font-bold"
+                                className="w-full px-2 py-1 rounded border border-outline-variant text-[11px] sm:text-xs font-bold"
                                 placeholder="Heading / Title"
                               />
                               <input
@@ -2018,7 +2642,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     subHeading: e.target.value,
                                   }))
                                 }
-                                className="w-full px-2 py-1 rounded border border-outline-variant text-[11px]"
+                                className="w-full px-2 py-1 rounded border border-outline-variant text-[10px] sm:text-[11px]"
                                 placeholder="Sub-heading"
                               />
                               <div className="grid grid-cols-2 gap-1.5">
@@ -2031,7 +2655,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       category: e.target.value,
                                     }))
                                   }
-                                  className="w-full px-2 py-1 rounded border border-outline-variant text-xs uppercase"
+                                  className="w-full px-2 py-1 rounded border border-outline-variant text-[10px] sm:text-xs uppercase"
                                   placeholder="Type"
                                 />
                                 <select
@@ -2042,7 +2666,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       rowNumber: Number(e.target.value) === 2 ? 2 : 1,
                                     }))
                                   }
-                                  className="w-full px-2 py-1 rounded border border-outline-variant text-xs"
+                                  className="w-full px-1.5 py-1 rounded border border-outline-variant text-[10px] sm:text-xs"
                                 >
                                   <option value={1}>Row 1</option>
                                   <option value={2}>Row 2</option>
@@ -2057,9 +2681,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     description: e.target.value,
                                   }))
                                 }
-                                className="w-full px-2 py-1 rounded border border-outline-variant text-[11px]"
+                                className="w-full px-2 py-1 rounded border border-outline-variant text-[10px] sm:text-[11px]"
                               />
-                              <label className="block px-2 py-1 rounded bg-primary-container/25 text-primary text-[10px] font-bold text-center cursor-pointer">
+                              <label className="block px-2 py-1 rounded bg-primary-container/25 text-primary text-[9px] sm:text-[10px] font-bold text-center cursor-pointer truncate">
                                 Upload Replacement Image
                                 <input
                                   type="file"
@@ -2076,15 +2700,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                           ) : (
                             <>
-                              <h4 className="font-bold text-sm text-on-surface line-clamp-1">
+                              <h4 className="font-bold text-xs sm:text-sm text-on-surface line-clamp-1 leading-tight">
                                 {item.title}
                               </h4>
                               {item.subHeading && (
-                                <p className="text-[10px] text-primary font-semibold mt-0.5 line-clamp-1">
+                                <p className="text-[9.5px] sm:text-[10px] text-primary font-semibold mt-0.5 line-clamp-1 leading-tight">
                                   {item.subHeading}
                                 </p>
                               )}
-                              <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-2">
+                              <p className="text-[10px] sm:text-[11px] text-on-surface-variant mt-1 line-clamp-2 leading-snug">
                                 {item.description}
                               </p>
                             </>
@@ -2092,20 +2716,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="pt-3 mt-2 border-t border-outline-variant/20 flex justify-between items-center px-1 gap-1.5">
+                      <div className="pt-2 sm:pt-3 mt-2 border-t border-outline-variant/20 flex justify-between items-center px-0.5 sm:px-1 gap-1.5">
                         {isEditingThis ? (
                           <>
                             <button
                               type="button"
                               onClick={() => handleSaveUpdateGalleryItem(item.id)}
-                              className="px-2.5 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg bg-primary text-on-primary text-[10px] sm:text-xs font-bold cursor-pointer"
                             >
                               Save
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingGalleryId(null)}
-                              className="px-2.5 py-1.5 rounded-lg border border-outline-variant text-xs font-semibold cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg border border-outline-variant text-[10px] sm:text-xs font-semibold cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -2115,7 +2739,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => handleStartEditGalleryItem(item)}
-                              className="px-2.5 py-1.5 rounded-lg bg-primary-container/20 text-primary hover:bg-primary-container/35 text-xs font-bold transition-colors cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg bg-primary-container/20 text-primary hover:bg-primary-container/35 text-[10px] sm:text-xs font-bold transition-colors cursor-pointer"
                             >
                               Edit
                             </button>
@@ -2123,10 +2747,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               type="button"
                               disabled={deletingGalleryId === item.id}
                               onClick={() => handleDeleteGalleryItem(item)}
-                              className="px-3 py-1.5 rounded-lg bg-error/10 text-error hover:bg-error hover:text-on-error text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-error/10 text-error hover:bg-error hover:text-on-error text-[10px] sm:text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50 min-w-0"
                             >
-                              <span className="material-symbols-outlined text-xs">delete</span>
-                              <span>{deletingGalleryId === item.id ? 'Deleting...' : 'Delete'}</span>
+                              <span className="material-symbols-outlined text-xs shrink-0">delete</span>
+                              <span className="truncate">{deletingGalleryId === item.id ? 'Deleting...' : 'Delete'}</span>
                             </button>
                           </>
                         )}
@@ -2141,19 +2765,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* =================================================================
               PRIVILEGE 3: ORDER HISTORY (Name, Email ID, Phone No., Date, Time of Issue)
           ================================================================== */}
-          {(activeTab === 'Dashboard' || activeTab === 'Orders') && (
+          {activeTab === 'Orders' && (
             <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-4 shadow-xs">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
-                    Complete Order Audit Log
-                  </span>
                   <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
                     Order Placement History ({filteredOrders.length})
                   </h2>
-                  <p className="text-xs text-on-surface-variant">
-                    Displays customer Name, Email ID, Phone No., Date, and exact Time of Issue extracted from Supabase
-                  </p>
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-xl border border-outline-variant/30 text-sm w-full sm:w-auto">
@@ -2283,25 +2901,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               Displays: Full Name, Email Address, Mobile No, Your Address,
               Cover Image, Dietary Note, and Date on which the profile is saved
           ================================================================== */}
-          {(activeTab === 'Settings' || activeTab === 'Dashboard') && (
-            <section className="bg-surface-container-low rounded-2xl p-5 sm:p-6 border border-outline-variant/40 flex flex-col gap-6 shadow-xs">
+          {activeTab === 'Settings' && (
+            <section className="bg-surface-container-low rounded-2xl p-3 sm:p-6 border border-outline-variant/40 flex flex-col gap-5 sm:gap-6 shadow-xs overflow-hidden">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-outline-variant/30 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-xs">
+                  <div className="w-11 h-11 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-xs shrink-0">
                     <span className="material-symbols-outlined">badge</span>
                   </div>
                   <div>
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
-                        Supabase Saved Customer Profiles (`profiles` &amp; `app-files`)
-                      </span>
-                    </div>
                     <h2 className="text-lg sm:text-xl font-black text-on-surface font-headline">
                       User Saved Profile Data ({filteredSavedProfiles.length})
                     </h2>
-                    <p className="text-xs text-on-surface-variant">
-                      View each user&apos;s Full Name, Email Address, Mobile No., Your Address, Cover Image, Dietary Note, and the Date on which the profile was saved.
-                    </p>
                   </div>
                 </div>
                 <span className="px-3 py-1 rounded-full bg-primary text-on-primary text-xs font-bold">
@@ -2325,200 +2935,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {filteredSavedProfiles.map((profile) => {
-                      const dt = new Date(profile.savedAt);
-                      const validDt = !isNaN(dt.getTime());
-                      const formattedSavedDate = validDt
-                        ? dt.toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })
-                        : '—';
-                      const formattedSavedTime = validDt
-                        ? dt.toLocaleTimeString('en-IN', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true,
-                          })
-                        : '';
-
-                      return (
-                        <div
-                          key={profile.id}
-                          className="bg-surface rounded-2xl border border-outline-variant/40 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col"
-                        >
-                          {/* Cover Image Banner */}
-                          <div className="relative h-36 w-full bg-surface-container overflow-hidden border-b border-outline-variant/30">
-                            {profile.coverImage ? (
-                              <>
-                                <img
-                                  src={profile.coverImage}
-                                  alt={`${profile.fullName} Cover`}
-                                  className="w-full h-full object-cover"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
-                                <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/65 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-xs">
-                                  <span className="material-symbols-outlined text-xs">image</span>
-                                  <span>Cover Image Uploaded</span>
-                                </span>
-                              </>
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-r from-primary/15 via-primary-container/25 to-secondary-container/30 flex flex-col items-center justify-center text-on-surface-variant gap-1">
-                                <span className="material-symbols-outlined text-2xl text-primary/60">
-                                  wallpaper
-                                </span>
-                                <span className="text-[11px] font-semibold">
-                                  No Cover Image Uploaded
-                                </span>
-                              </div>
-                            )}
-
-                            {/* Saved Date Badge */}
-                            <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-surface/90 text-on-surface text-[11px] font-bold shadow-xs flex items-center gap-1 backdrop-blur-xs">
-                              <span className="material-symbols-outlined text-xs text-primary">
-                                event_available
-                              </span>
-                              <span>
-                                Saved: {formattedSavedDate}
-                                {formattedSavedTime ? ` · ${formattedSavedTime}` : ''}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Profile Body */}
-                          <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-4">
-                            <div className="space-y-3.5">
-                              {/* Avatar + Full Name + Role */}
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-center gap-3">
-                                  {profile.coverImage ? (
-                                    <img
-                                      src={profile.coverImage}
-                                      alt={profile.fullName}
-                                      className="w-12 h-12 rounded-xl object-cover border border-outline-variant shadow-2xs shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-12 h-12 rounded-xl bg-primary-container text-on-primary-container font-bold text-base flex items-center justify-center uppercase shrink-0">
-                                      {(profile.fullName || 'CZ').slice(0, 2)}
-                                    </div>
-                                  )}
-                                  <div>
-                                    <span className="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
-                                      Full Name
-                                    </span>
-                                    <h3 className="text-base font-black text-on-surface leading-tight">
-                                      {profile.fullName || '—'}
-                                    </h3>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  {profile.role && (
-                                    <span
-                                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                        profile.role === 'Admin'
-                                          ? 'bg-primary text-on-primary'
-                                          : 'bg-secondary-container text-on-secondary-container'
-                                      }`}
-                                    >
-                                      {profile.role}
-                                    </span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteSavedProfile(profile)}
-                                    className="p-1.5 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors cursor-pointer"
-                                    title="Remove saved profile record"
-                                  >
-                                    <span className="material-symbols-outlined text-base">
-                                      delete
-                                    </span>
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Details Grid: Email Address, Mobile No, Your Address, Date Saved */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-xs text-primary">
-                                      mail
-                                    </span>
-                                    Email Address
-                                  </span>
-                                  <p className="text-xs font-semibold text-on-surface mt-0.5 break-all">
-                                    {profile.email || '—'}
-                                  </p>
-                                </div>
-
-                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-xs text-primary">
-                                      call
-                                    </span>
-                                    Mobile No.
-                                  </span>
-                                  <p className="text-xs font-semibold text-on-surface mt-0.5 tabular-nums">
-                                    {profile.phone || '—'}
-                                  </p>
-                                </div>
-
-                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-xs text-primary">
-                                      location_on
-                                    </span>
-                                    Your Address
-                                  </span>
-                                  <p className="text-xs font-semibold text-on-surface mt-0.5">
-                                    {profile.address && profile.address !== '—'
-                                      ? profile.address
-                                      : profile.cityCode || '—'}
-                                  </p>
-                                </div>
-
-                                <div className="p-2.5 rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-xs text-primary">
-                                      restaurant
-                                    </span>
-                                    Dietary Note
-                                  </span>
-                                  <p className="text-xs font-medium text-on-surface mt-0.5 whitespace-pre-wrap">
-                                    {profile.dietaryNotes && profile.dietaryNotes !== '—'
-                                      ? profile.dietaryNotes
-                                      : 'No dietary notes specified'}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Footer: Cover Image File & Saved Date */}
-                            <div className="pt-3 border-t border-outline-variant/25 flex flex-wrap items-center justify-between gap-2 text-[11px] text-on-surface-variant">
-                              <span className="inline-flex items-center gap-1 font-medium">
-                                <span className="material-symbols-outlined text-sm text-primary">
-                                  photo_library
-                                </span>
-                                {profile.coverImage
-                                  ? profile.coverImageName || 'Profile Cover Image'
-                                  : 'No Cover Image'}
-                              </span>
-                              <span className="inline-flex items-center gap-1 font-bold text-on-surface tabular-nums">
-                                <span className="material-symbols-outlined text-sm text-primary">
-                                  schedule
-                                </span>
-                                Saved on {formattedSavedDate}
-                                {formattedSavedTime ? `, ${formattedSavedTime}` : ''}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Structured Summary Table of All Saved User Profiles */}
+                  {/* Structured Summary Table of All Saved User Profiles (Placed below heading h2) */}
                   <div className="overflow-x-auto rounded-xl border border-outline-variant/30 bg-surface">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -2608,6 +3025,203 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-5 w-full min-w-0">
+                    {filteredSavedProfiles.map((profile) => {
+                      const dt = new Date(profile.savedAt);
+                      const validDt = !isNaN(dt.getTime());
+                      const formattedSavedDate = validDt
+                        ? dt.toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })
+                        : '—';
+                      const formattedSavedTime = validDt
+                        ? dt.toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true,
+                          })
+                        : '';
+
+                      return (
+                        <div
+                          key={profile.id}
+                          className="bg-surface rounded-xl sm:rounded-2xl border border-outline-variant/40 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col min-w-0"
+                        >
+                          {/* Cover Image Banner */}
+                          <div className="relative h-24 sm:h-36 w-full bg-surface-container overflow-hidden border-b border-outline-variant/30">
+                            {profile.coverImage ? (
+                              <>
+                                <img
+                                  src={profile.coverImage}
+                                  alt={`${profile.fullName} Cover`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
+                                <span className="hidden sm:flex absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/65 text-white text-[10px] font-bold uppercase tracking-wider items-center gap-1 backdrop-blur-xs">
+                                  <span className="material-symbols-outlined text-xs">image</span>
+                                  <span>Cover Image Uploaded</span>
+                                </span>
+                              </>
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-r from-primary/15 via-primary-container/25 to-secondary-container/30 flex flex-col items-center justify-center text-on-surface-variant gap-0.5 sm:gap-1 px-2 text-center">
+                                <span className="material-symbols-outlined text-lg sm:text-2xl text-primary/60">
+                                  wallpaper
+                                </span>
+                                <span className="text-[9px] sm:text-[11px] font-semibold">
+                                  No Cover Image
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Saved Date Badge */}
+                            <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-surface/90 text-on-surface text-[8.5px] sm:text-[11px] font-bold shadow-xs flex items-center gap-1 backdrop-blur-xs max-w-[92%] truncate">
+                              <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary shrink-0">
+                                event_available
+                              </span>
+                              <span className="truncate">
+                                {formattedSavedDate}
+                                <span className="hidden sm:inline">
+                                  {formattedSavedTime ? ` · ${formattedSavedTime}` : ''}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Profile Body */}
+                          <div className="p-2.5 sm:p-5 flex-1 flex flex-col justify-between gap-2.5 sm:gap-4 min-w-0">
+                            <div className="space-y-2 sm:space-y-3.5 min-w-0">
+                              {/* Avatar + Full Name + Role */}
+                              <div className="flex items-start justify-between gap-1.5 sm:gap-3 min-w-0">
+                                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                  {profile.coverImage ? (
+                                    <img
+                                      src={profile.coverImage}
+                                      alt={profile.fullName}
+                                      className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl object-cover border border-outline-variant shadow-2xs shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-primary-container text-on-primary-container font-bold text-xs sm:text-base flex items-center justify-center uppercase shrink-0">
+                                      {(profile.fullName || 'CZ').slice(0, 2)}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <span className="block text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                                      Full Name
+                                    </span>
+                                    <h3 className="text-xs sm:text-base font-black text-on-surface leading-tight truncate">
+                                      {profile.fullName || '—'}
+                                    </h3>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {profile.role && (
+                                    <span
+                                      className={`px-1.5 sm:px-2.5 py-0.5 rounded-full text-[8.5px] sm:text-[10px] font-bold ${
+                                        profile.role === 'Admin'
+                                          ? 'bg-primary text-on-primary'
+                                          : 'bg-secondary-container text-on-secondary-container'
+                                      }`}
+                                    >
+                                      {profile.role}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSavedProfile(profile)}
+                                    className="p-1 sm:p-1.5 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors cursor-pointer"
+                                    title="Remove saved profile record"
+                                  >
+                                    <span className="material-symbols-outlined text-xs sm:text-base">
+                                      delete
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Details Grid: Email Address, Mobile No, Your Address, Date Saved */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2.5 pt-0.5 sm:pt-1 min-w-0">
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 min-w-0">
+                                  <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
+                                      mail
+                                    </span>
+                                    Email
+                                  </span>
+                                  <p className="text-[10px] sm:text-xs font-semibold text-on-surface mt-0.5 break-all leading-tight">
+                                    {profile.email || '—'}
+                                  </p>
+                                </div>
+
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 min-w-0">
+                                  <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
+                                      call
+                                    </span>
+                                    Mobile No.
+                                  </span>
+                                  <p className="text-[10px] sm:text-xs font-semibold text-on-surface mt-0.5 tabular-nums truncate">
+                                    {profile.phone || '—'}
+                                  </p>
+                                </div>
+
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2 min-w-0">
+                                  <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
+                                      location_on
+                                    </span>
+                                    Address
+                                  </span>
+                                  <p className="text-[10px] sm:text-xs font-semibold text-on-surface mt-0.5 line-clamp-2 leading-tight">
+                                    {profile.address && profile.address !== '—'
+                                      ? profile.address
+                                      : profile.cityCode || '—'}
+                                  </p>
+                                </div>
+
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2 min-w-0">
+                                  <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
+                                      restaurant
+                                    </span>
+                                    Dietary Note
+                                  </span>
+                                  <p className="text-[10px] sm:text-xs font-medium text-on-surface mt-0.5 line-clamp-2 leading-tight">
+                                    {profile.dietaryNotes && profile.dietaryNotes !== '—'
+                                      ? profile.dietaryNotes
+                                      : 'No dietary notes specified'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Footer: Cover Image File & Saved Date */}
+                            <div className="pt-2 sm:pt-3 border-t border-outline-variant/25 flex flex-wrap items-center justify-between gap-1 text-[9px] sm:text-[11px] text-on-surface-variant min-w-0">
+                              <span className="hidden sm:inline-flex items-center gap-1 font-medium truncate">
+                                <span className="material-symbols-outlined text-sm text-primary">
+                                  photo_library
+                                </span>
+                                {profile.coverImage
+                                  ? profile.coverImageName || 'Profile Cover Image'
+                                  : 'No Cover Image'}
+                              </span>
+                              <span className="inline-flex items-center gap-1 font-bold text-on-surface tabular-nums truncate">
+                                <span className="material-symbols-outlined text-xs sm:text-sm text-primary shrink-0">
+                                  schedule
+                                </span>
+                                <span className="truncate">
+                                  Saved {formattedSavedDate}
+                                  {formattedSavedTime ? `, ${formattedSavedTime}` : ''}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
