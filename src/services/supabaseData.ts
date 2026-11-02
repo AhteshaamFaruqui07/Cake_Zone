@@ -32,6 +32,7 @@ export const ADMIN_EMAILS: string[] = [
 // ============================================================================
 const SHARED_STORE_KEYS = {
   orders: 'cakezone_shared_admin_orders_v1',
+  orderOverrides: 'cakezone_shared_order_overrides_v1',
   deletedOrders: 'cakezone_shared_deleted_orders_v1',
   users: 'cakezone_shared_admin_users_v1',
   savedProfiles: 'cakezone_shared_saved_profiles_v1',
@@ -51,6 +52,12 @@ const SHARED_STORE_KEYS = {
   revokedAdmins: 'cakezone_shared_revoked_admins_v1',
   promotedAdmins: 'cakezone_shared_promoted_admins_v1',
 };
+
+export interface OrderOverrideEntry {
+  status?: OrderStatus;
+  amount?: number;
+  updatedAt: string;
+}
 
 const readSharedStore = <T>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') return fallback;
@@ -1251,13 +1258,40 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
     return { data: [], error };
   }
 
-  // Enrich with Supabase profiles, products, and custom_cakes tables
+  // Enrich with Supabase profiles, products, custom_cakes, and custom_cake_settings tables
   const profilesByUserId: Record<string, { full_name?: string; email?: string; phone?: string }> = {};
-  const [profilesRes, productsRes, customCakesRes] = await Promise.all([
+  const [profilesRes, productsRes, customCakesRes, settingsRes] = await Promise.all([
     supabase.from('profiles').select('*'),
     supabase.from('products').select('*'),
     supabase.from('custom_cakes').select('*').order('created_at', { ascending: false }),
+    supabase.from('custom_cake_settings').select('settings').eq('id', 'default').maybeSingle(),
   ]);
+
+  const localOverrides = readSharedStore<Record<string, OrderOverrideEntry>>(
+    SHARED_STORE_KEYS.orderOverrides,
+    {}
+  );
+  const remoteOverrides: Record<string, OrderOverrideEntry> =
+    settingsRes.data?.settings?.orderOverrides &&
+    typeof settingsRes.data.settings.orderOverrides === 'object'
+      ? settingsRes.data.settings.orderOverrides
+      : {};
+
+  const mergedOverrides: Record<string, OrderOverrideEntry> = { ...remoteOverrides };
+  Object.entries(localOverrides).forEach(([ordKey, localEntry]) => {
+    const remEntry = mergedOverrides[ordKey];
+    if (!remEntry) {
+      mergedOverrides[ordKey] = localEntry;
+    } else {
+      const tLocal = localEntry.updatedAt ? new Date(localEntry.updatedAt).getTime() : 0;
+      const tRem = remEntry.updatedAt ? new Date(remEntry.updatedAt).getTime() : 0;
+      mergedOverrides[ordKey] =
+        tLocal >= tRem ? { ...remEntry, ...localEntry } : { ...localEntry, ...remEntry };
+    }
+  });
+  if (Object.keys(mergedOverrides).length > 0) {
+    writeSharedStore(SHARED_STORE_KEYS.orderOverrides, mergedOverrides);
+  }
 
   const profilesData = profilesRes.data;
   if (Array.isArray(profilesData)) {
@@ -1353,8 +1387,11 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
       customCakesByUser
     );
 
+    const resolvedOrderId = row.order_code || row.id;
+    const override = mergedOverrides[resolvedOrderId] || mergedOverrides[row.id];
+
     return {
-      id: row.order_code || row.id,
+      id: resolvedOrderId,
       userId: row.user_id,
       customer: resolvedName,
       customerEmail: resolvedEmail,
@@ -1364,8 +1401,11 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
       date: formattedDate,
       timeOfIssue: formattedTime,
       createdAt: row.created_at,
-      status: (row.status as OrderStatus) || 'Pending',
-      amount: Number(row.amount || 0),
+      status: override?.status || (row.status as OrderStatus) || 'Pending',
+      amount:
+        typeof override?.amount === 'number'
+          ? override.amount
+          : Number(row.amount || 0),
       specialInstructions: row.special_instructions || '',
     };
   });
@@ -1375,18 +1415,33 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
 
   if (isAdmin) {
     const byId = new Map<string, Order>();
-    // Load shared orders first, then overlay fresh DB orders, keeping status updates synced
+    // Load shared orders first, then overlay fresh DB orders, keeping status & price updates synced
     sharedOrders.forEach((ord) => {
       if (ord?.id && !deletedOrderIds.has(ord.id)) {
-        byId.set(ord.id, ord);
+        const override = mergedOverrides[ord.id];
+        byId.set(ord.id, {
+          ...ord,
+          status: override?.status || ord.status,
+          amount: typeof override?.amount === 'number' ? override.amount : Number(ord.amount || 0),
+        });
       }
     });
     mapped.forEach((ord) => {
       if (ord?.id && !deletedOrderIds.has(ord.id)) {
         const existingShared = byId.get(ord.id);
+        const override = mergedOverrides[ord.id];
+        const resolvedAmount =
+          typeof override?.amount === 'number'
+            ? override.amount
+            : typeof existingShared?.amount === 'number' &&
+              existingShared.amount > 0 &&
+              Number(ord.amount) === 0
+            ? existingShared.amount
+            : Number(ord.amount || 0);
         byId.set(ord.id, {
           ...ord,
-          status: existingShared?.status || ord.status,
+          status: override?.status || existingShared?.status || ord.status,
+          amount: resolvedAmount,
         });
       }
     });
@@ -1410,7 +1465,12 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
         ord.customerEmail &&
         ord.customerEmail.trim().toLowerCase() === userEmailLower);
     if (matchesUser) {
-      byCustomerOrderId.set(ord.id, ord);
+      const override = mergedOverrides[ord.id];
+      byCustomerOrderId.set(ord.id, {
+        ...ord,
+        status: override?.status || ord.status,
+        amount: typeof override?.amount === 'number' ? override.amount : Number(ord.amount || 0),
+      });
     }
   });
 
@@ -1418,9 +1478,20 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
     if (!ord?.id || deletedOrderIds.has(ord.id)) return;
     const existingShared =
       byCustomerOrderId.get(ord.id) || sharedOrders.find((so) => so.id === ord.id);
+    const override = mergedOverrides[ord.id];
+    const resolvedAmount =
+      typeof override?.amount === 'number'
+        ? override.amount
+        : typeof existingShared?.amount === 'number' &&
+          existingShared.amount > 0 &&
+          Number(ord.amount) === 0
+        ? existingShared.amount
+        : Number(ord.amount || 0);
+
     byCustomerOrderId.set(ord.id, {
       ...ord,
-      status: existingShared?.status || ord.status,
+      status: override?.status || existingShared?.status || ord.status,
+      amount: resolvedAmount,
     });
   });
 
@@ -1557,6 +1628,44 @@ export const createOrderInDb = async (params: {
   return { data, orderCode, error };
 };
 
+const syncOrderOverridesToSupabaseSettings = async (
+  userId: string,
+  overrides: Record<string, OrderOverrideEntry>
+) => {
+  try {
+    const { data: existing } = await supabase
+      .from('custom_cake_settings')
+      .select('settings')
+      .eq('id', 'default')
+      .maybeSingle();
+
+    const baseSettings =
+      existing?.settings && typeof existing.settings === 'object'
+        ? existing.settings
+        : DEFAULT_CUSTOM_CAKE_SETTINGS;
+
+    const mergedOverrides = {
+      ...(baseSettings.orderOverrides || {}),
+      ...overrides,
+    };
+
+    await supabase.from('custom_cake_settings').upsert(
+      {
+        id: 'default',
+        user_id: userId,
+        settings: {
+          ...baseSettings,
+          orderOverrides: mergedOverrides,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+  } catch {
+    // Ignore if custom_cake_settings table does not exist or blocks write
+  }
+};
+
 export const updateOrderStatusInDb = async (orderIdOrCode: string, status: OrderStatus) => {
   const { data: { session } } = await supabase.auth.getSession();
   const userId = session?.user?.id || null;
@@ -1565,7 +1674,19 @@ export const updateOrderStatusInDb = async (orderIdOrCode: string, status: Order
   const isAdmin = await resolveIsAdminFromSupabase(session?.user);
   const column = orderIdOrCode.startsWith('#CZ-') ? 'order_code' : 'id';
 
-  // Sync status across all admin accounts immediately
+  // 1. Save in dedicated orderOverrides store so status is guaranteed to persist in UserProfile & AdminDashboard
+  const overrides = readSharedStore<Record<string, OrderOverrideEntry>>(
+    SHARED_STORE_KEYS.orderOverrides,
+    {}
+  );
+  overrides[orderIdOrCode] = {
+    ...(overrides[orderIdOrCode] || {}),
+    status,
+    updatedAt: new Date().toISOString(),
+  };
+  writeSharedStore(SHARED_STORE_KEYS.orderOverrides, overrides);
+
+  // 2. Sync status in sharedOrders store immediately
   const sharedOrders = readSharedStore<Order[]>(SHARED_STORE_KEYS.orders, []);
   if (sharedOrders.length > 0) {
     writeSharedStore(
@@ -1574,9 +1695,76 @@ export const updateOrderStatusInDb = async (orderIdOrCode: string, status: Order
     );
   }
 
+  // 3. Notify any mounted UserProfile or AdminDashboard listeners
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('cakezone-orders-updated', {
+        detail: { orderId: orderIdOrCode, status },
+      })
+    );
+  }
+
+  // 4. Sync to Supabase custom_cake_settings (cross-user fallback) and orders table
+  await syncOrderOverridesToSupabaseSettings(userId, overrides);
+
   let query = supabase
     .from('orders')
     .update({ status })
+    .eq(column, orderIdOrCode);
+
+  if (!isAdmin) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query.select().maybeSingle();
+  return { data, error };
+};
+
+export const updateOrderAmountInDb = async (orderIdOrCode: string, amount: number) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user?.id || null;
+  if (!userId) return { data: null, error: new Error('Not authenticated') };
+
+  const isAdmin = await resolveIsAdminFromSupabase(session?.user);
+  const numericAmount = Math.max(0, Number(Number(amount).toFixed(2)) || 0);
+  const column = orderIdOrCode.startsWith('#CZ-') ? 'order_code' : 'id';
+
+  // 1. Save in dedicated orderOverrides store so updated price persists in AdminDashboard & UserProfile
+  const overrides = readSharedStore<Record<string, OrderOverrideEntry>>(
+    SHARED_STORE_KEYS.orderOverrides,
+    {}
+  );
+  overrides[orderIdOrCode] = {
+    ...(overrides[orderIdOrCode] || {}),
+    amount: numericAmount,
+    updatedAt: new Date().toISOString(),
+  };
+  writeSharedStore(SHARED_STORE_KEYS.orderOverrides, overrides);
+
+  // 2. Sync updated amount in sharedOrders store immediately
+  const sharedOrders = readSharedStore<Order[]>(SHARED_STORE_KEYS.orders, []);
+  if (sharedOrders.length > 0) {
+    writeSharedStore(
+      SHARED_STORE_KEYS.orders,
+      sharedOrders.map((o) => (o.id === orderIdOrCode ? { ...o, amount: numericAmount } : o))
+    );
+  }
+
+  // 3. Notify any mounted UserProfile or AdminDashboard listeners
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('cakezone-orders-updated', {
+        detail: { orderId: orderIdOrCode, amount: numericAmount },
+      })
+    );
+  }
+
+  // 4. Sync to Supabase custom_cake_settings (cross-user fallback) and orders table
+  await syncOrderOverridesToSupabaseSettings(userId, overrides);
+
+  let query = supabase
+    .from('orders')
+    .update({ amount: numericAmount })
     .eq(column, orderIdOrCode);
 
   if (!isAdmin) {

@@ -19,6 +19,7 @@ import { supabase } from '../supabaseClient';
 import {
   fetchOrders,
   updateOrderStatusInDb,
+  updateOrderAmountInDb,
   deleteOrderFromDb,
   resolveIsAdminFromSupabase,
   fetchAllLoggedInUsersFromSupabase,
@@ -180,6 +181,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newAdminEmailInput, setNewAdminEmailInput] = useState('');
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   const [activeAdminEmail, setActiveAdminEmail] = useState<string>(ADMIN_EMAILS[0]);
+  const [editingOrderPriceId, setEditingOrderPriceId] = useState<string | null>(null);
+  const [editingOrderPriceValue, setEditingOrderPriceValue] = useState<string>('');
+  const [isSavingOrderPrice, setIsSavingOrderPrice] = useState<string | null>(null);
 
   // Dashboard Overview timeframe filter & menu dropdown state
   const [timeframeFilter, setTimeframeFilter] = useState<
@@ -612,25 +616,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // ==========================================================================
-  // HANDLERS: ORDERS
+  // HANDLERS: ORDERS (Status Update & Custom Cake Price Edit)
   // ==========================================================================
-  const handleCycleStatus = async (orderId: string) => {
-    let updatedStatus: OrderStatus = 'Pending';
-
+  const handleSetOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     setOrders((prev) =>
-      prev.map((ord) => {
-        if (ord.id === orderId) {
-          if (ord.status === 'Pending') updatedStatus = 'Baking';
-          else if (ord.status === 'Baking') updatedStatus = 'Delivered';
-          else updatedStatus = 'Pending';
-          return { ...ord, status: updatedStatus };
-        }
-        return ord;
-      })
+      prev.map((ord) => (ord.id === orderId ? { ...ord, status: newStatus } : ord))
     );
+    await updateOrderStatusInDb(orderId, newStatus);
+    showFeedback(
+      `Order ${orderId} status updated to ${newStatus} (synced with User Profile).`
+    );
+  };
 
-    await updateOrderStatusInDb(orderId, updatedStatus);
-    showFeedback(`Order ${orderId} status updated to ${updatedStatus}.`);
+  const handleCycleStatus = async (orderId: string, currentOrderStatus?: OrderStatus) => {
+    const currentOrder = orders.find((ord) => ord.id === orderId);
+    const rawStatus = String(currentOrderStatus || currentOrder?.status || 'Pending').trim();
+    const nextStatus: OrderStatus =
+      rawStatus === 'Pending'
+        ? 'Baking'
+        : rawStatus === 'Baking'
+        ? 'Delivered'
+        : 'Pending';
+
+    await handleSetOrderStatus(orderId, nextStatus);
+  };
+
+  const handleStartEditOrderPrice = (ord: Order) => {
+    setEditingOrderPriceId(ord.id);
+    setEditingOrderPriceValue(
+      Number(ord.amount) > 0 ? String(Number(ord.amount)) : ''
+    );
+  };
+
+  const handleSaveOrderPrice = async (orderId: string) => {
+    const cleaned = editingOrderPriceValue.replace(/[^0-9.]/g, '');
+    const parsedPrice = cleaned === '' ? 0 : Math.max(0, Number(Number(cleaned).toFixed(2)));
+    if (isNaN(parsedPrice)) {
+      showFeedback('Please enter a valid price in ₹.');
+      return;
+    }
+
+    setIsSavingOrderPrice(orderId);
+    try {
+      setOrders((prev) =>
+        prev.map((ord) => (ord.id === orderId ? { ...ord, amount: parsedPrice } : ord))
+      );
+      setEditingOrderPriceId(null);
+      await updateOrderAmountInDb(orderId, parsedPrice);
+      showFeedback(
+        `Order ${orderId} price updated to ₹${parsedPrice.toLocaleString('en-IN')} and reflected in Dashboard revenue!`
+      );
+    } finally {
+      setIsSavingOrderPrice(null);
+    }
   };
 
   const handleDeleteOrder = async (orderId: string) => {
@@ -2853,29 +2891,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </td>
                           <td className="py-3.5 px-4 whitespace-nowrap">
                             <button
-                              onClick={() => handleCycleStatus(ord.id)}
-                              title="Click to cycle order status"
+                              type="button"
+                              onClick={() => handleCycleStatus(ord.id, ord.status)}
+                              title="Click to cycle order status (Pending → Baking → Delivered)"
                               className="focus:outline-none cursor-pointer"
                             >
-                              {ord.status === 'Pending' && (
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 transition-colors">
-                                  Pending
-                                </span>
-                              )}
-                              {ord.status === 'Baking' && (
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-primary-container/20 text-primary hover:bg-primary-container/30 transition-colors">
-                                  Baking
-                                </span>
-                              )}
-                              {ord.status === 'Delivered' && (
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 transition-colors">
-                                  Delivered
-                                </span>
-                              )}
+                              <span
+                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold transition-colors select-none ${
+                                  ord.status === 'Delivered'
+                                    ? 'bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25'
+                                    : ord.status === 'Baking'
+                                    ? 'bg-primary-container/20 text-primary hover:bg-primary-container/30'
+                                    : 'bg-amber-500/15 text-amber-800 hover:bg-amber-500/25'
+                                }`}
+                              >
+                                {ord.status || 'Pending'}
+                              </span>
                             </button>
                           </td>
                           <td className="py-3.5 px-4 text-right font-black text-on-surface tabular-nums whitespace-nowrap">
-                            ₹{Number(ord.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {(() => {
+                              const isCustomOrder =
+                                /custom/i.test(ord.cakeItem) ||
+                                /custom/i.test(ord.cakeTypeDetail || '') ||
+                                /custom/i.test(ord.specialInstructions || '') ||
+                                Number(ord.amount) === 0;
+
+                              if (!isCustomOrder) {
+                                return (
+                                  <>
+                                    ₹
+                                    {Number(ord.amount).toLocaleString('en-IN', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </>
+                                );
+                              }
+
+                              if (editingOrderPriceId === ord.id) {
+                                return (
+                                  <div className="inline-flex items-center justify-end gap-1.5">
+                                    <div className="relative flex items-center">
+                                      <span className="absolute left-2 text-xs font-bold text-on-surface-variant">
+                                        ₹
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        autoFocus
+                                        value={editingOrderPriceValue}
+                                        onChange={(e) => setEditingOrderPriceValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleSaveOrderPrice(ord.id);
+                                          } else if (e.key === 'Escape') {
+                                            setEditingOrderPriceId(null);
+                                          }
+                                        }}
+                                        placeholder="Enter ₹"
+                                        className="w-24 pl-5 pr-2 py-1 rounded-lg border border-primary bg-white text-xs font-extrabold text-on-surface text-right focus:outline-none focus:ring-2 focus:ring-primary/25"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled={isSavingOrderPrice === ord.id}
+                                      onClick={() => handleSaveOrderPrice(ord.id)}
+                                      className="px-2 py-1 rounded-lg bg-primary text-on-primary text-[11px] font-bold hover:opacity-90 cursor-pointer disabled:opacity-50"
+                                      title="Save price & update Dashboard revenue"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingOrderPriceId(null)}
+                                      className="px-1.5 py-1 rounded-lg border border-outline-variant text-[11px] font-bold text-on-surface-variant hover:bg-surface-container cursor-pointer"
+                                      title="Cancel"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="inline-flex items-center justify-end gap-2">
+                                  <span>
+                                    ₹
+                                    {Number(ord.amount).toLocaleString('en-IN', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditOrderPrice(ord)}
+                                    title="Edit Design Custom Cake price (updates Dashboard revenue)"
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer bg-primary/15 text-primary hover:bg-primary hover:text-on-primary border border-primary/30"
+                                  >
+                                    <span className="material-symbols-outlined text-[13px] leading-none">
+                                      edit
+                                    </span>
+                                    <span>
+                                      {Number(ord.amount) === 0 ? 'Set Price' : 'Edit'}
+                                    </span>
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="py-3.5 px-4 text-center whitespace-nowrap">
                             <button

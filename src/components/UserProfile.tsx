@@ -50,6 +50,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(false);
+  const [activeProfileTab, setActiveProfileTab] = useState<'details' | 'orders'>('details');
 
   const fullNameInputRef = useRef<HTMLInputElement>(null);
   const formSectionRef = useRef<HTMLElement>(null);
@@ -187,15 +188,22 @@ export const UserProfile: React.FC<UserProfileProps> = ({
       .subscribe();
 
     const handleStorageSync = (e: StorageEvent) => {
-      if (e.key && e.key.includes('orders')) {
+      if (e.key && e.key.includes('order')) {
         loadCustomerOrders();
       }
     };
+    const handleCustomOrdersUpdated = () => {
+      loadCustomerOrders();
+    };
     window.addEventListener('storage', handleStorageSync);
+    window.addEventListener('cakezone-orders-updated', handleCustomOrdersUpdated);
+    window.addEventListener('focus', handleCustomOrdersUpdated);
 
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('storage', handleStorageSync);
+      window.removeEventListener('cakezone-orders-updated', handleCustomOrdersUpdated);
+      window.removeEventListener('focus', handleCustomOrdersUpdated);
     };
   }, [user?.email]);
 
@@ -395,7 +403,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
 
   return (
     <div className="min-h-full flex flex-col justify-between flex-grow bg-background">
-      <main className="flex-grow max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+      <main className="flex-grow max-w-5xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-3 sm:space-y-4">
         {/* Top Profile Hero Banner */}
         <section className="relative bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-lg overflow-hidden">
           {/* Cover Image Banner */}
@@ -420,23 +428,23 @@ export const UserProfile: React.FC<UserProfileProps> = ({
             <div className="h-1.5 w-full bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
           )}
 
-          <div className={`p-6 sm:p-8 ${coverImage ? 'pt-4 sm:pt-5' : ''}`}>
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div className="flex items-center gap-5">
+          <div className={`p-5 sm:p-8 ${coverImage ? 'pt-3 sm:pt-5' : ''}`}>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 sm:gap-6">
+              <div className="flex items-center gap-3.5 sm:gap-5 w-full md:w-auto">
                 {coverImage ? (
                   <img
                     src={coverImage}
                     alt={fullName || 'Profile'}
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-md border-2 border-surface -mt-10 sm:-mt-12 relative z-10 bg-surface"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-md border-2 border-surface -mt-4 sm:-mt-5 relative z-10 bg-surface shrink-0"
                   />
                 ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold text-2xl sm:text-3xl shadow-md border border-primary/20">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold text-2xl sm:text-3xl shadow-md border border-primary/20 shrink-0">
                     {(fullName.slice(0, 2) || user?.initials || 'CZ').toUpperCase()}
                   </div>
                 )}
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <h1 className="text-2xl sm:text-3xl font-headline font-bold text-on-surface tracking-tight">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl sm:text-3xl font-headline font-bold text-on-surface tracking-tight whitespace-nowrap">
                       {fullName || user?.name || 'CakeZone Member'}
                     </h1>
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
@@ -448,12 +456,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                     <span className="material-symbols-outlined text-base text-outline">mail</span>
                     {email || 'No email on file'}
                   </p>
-                  <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-outline">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-0 text-xs text-outline">
                     <span className="inline-flex items-center gap-1">
                       <span className="material-symbols-outlined text-sm text-primary">calendar_month</span>
                       Member since {memberSince}
                     </span>
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 -mt-0.5 sm:mt-0">
                       <span className="material-symbols-outlined text-sm text-primary">shield_lock</span>
                       {authProvider}
                     </span>
@@ -461,255 +469,386 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3.5 w-full md:w-[430px] lg:w-[460px] shrink-0">
                 <button
                   type="button"
                   onClick={() => {
-                    formSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    fullNameInputRef.current?.focus();
+                    setActiveProfileTab('details');
+                    window.setTimeout(() => {
+                      ordersSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      fullNameInputRef.current?.focus();
+                    }, 40);
                   }}
-                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-semibold shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-1.5 sm:py-3.5 rounded-full sm:rounded-[22px] bg-gradient-to-b from-[#6644B8] to-[#4E2E98] hover:from-[#5D3CA9] hover:to-[#442688] text-white shadow-[0_6px_16px_-4px_rgba(78,46,152,0.45)] transition-all cursor-pointer text-left"
                 >
-                  <span className="material-symbols-outlined text-base">person_add</span>
-                  Add Your Profile
+                  <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[15px] sm:text-[20px] text-white">
+                      person_add
+                    </span>
+                  </span>
+                  <span className="text-[11px] sm:text-[15px] font-semibold tracking-tight leading-none sm:leading-snug whitespace-nowrap">
+                    Edit Profile
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => onNavigate('storefront')}
-                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
+                  className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-1.5 sm:py-3.5 rounded-full sm:rounded-[22px] bg-[#F7F3FF] hover:bg-[#EFE8FF] border border-[#EDE5FC] text-[#1A1528] shadow-2xs transition-all cursor-pointer text-left"
                 >
-                  <span className="material-symbols-outlined text-base">storefront</span>
-                  Browse Cakes
+                  <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-white shadow-2xs flex items-center justify-center shrink-0 text-[#553499]">
+                    <span className="material-symbols-outlined text-[15px] sm:text-[20px]">
+                      storefront
+                    </span>
+                  </span>
+                  <span className="text-[11px] sm:text-[15px] font-medium tracking-tight leading-none sm:leading-snug whitespace-nowrap">
+                    Browse Cakes
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={onOpenConfigurator}
-                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
+                  className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-1.5 sm:py-3.5 rounded-full sm:rounded-[22px] bg-[#F7F3FF] hover:bg-[#EFE8FF] border border-[#EDE5FC] text-[#1A1528] shadow-2xs transition-all cursor-pointer text-left"
                 >
-                  <span className="material-symbols-outlined text-base">cake</span>
-                  Custom Cake Studio
+                  <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-white shadow-2xs flex items-center justify-center shrink-0 text-[#553499]">
+                    <span className="material-symbols-outlined text-[15px] sm:text-[20px]">
+                      cake
+                    </span>
+                  </span>
+                  <span className="text-[11px] sm:text-[15px] font-medium tracking-tight leading-none sm:leading-tight">
+                    Custom Cake<span className="hidden sm:inline"><br /></span><span className="sm:hidden"> </span>Studio
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => {
-                    ordersSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    setActiveProfileTab('orders');
+                    window.setTimeout(() => {
+                      ordersSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    }, 40);
                   }}
-                  className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-all cursor-pointer border border-outline-variant/60"
+                  className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-1.5 sm:py-3.5 rounded-full sm:rounded-[22px] bg-[#F7F3FF] hover:bg-[#EFE8FF] border border-[#EDE5FC] text-[#1A1528] shadow-2xs transition-all cursor-pointer text-left"
                 >
-                  <span className="material-symbols-outlined text-base text-primary">
-                    local_shipping
+                  <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-white shadow-2xs flex items-center justify-center shrink-0 text-[#553499]">
+                    <span className="material-symbols-outlined text-[15px] sm:text-[20px]">
+                      local_shipping
+                    </span>
                   </span>
-                  <span>Track Orders ({customerOrders.length})</span>
+                  <span className="text-[11px] sm:text-[15px] font-medium tracking-tight leading-none sm:leading-snug whitespace-nowrap">
+                    Track Orders{' '}
+                    <span className="text-[#6B3CE9] font-semibold">
+                      ({customerOrders.length})
+                    </span>
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-error/30 text-error hover:bg-error/10 text-xs font-semibold transition-all cursor-pointer"
+                  className="col-span-2 flex items-center justify-center gap-2 py-2 sm:py-3.5 px-4 rounded-full sm:rounded-[18px] bg-white hover:bg-[#FFF5F6] border border-[#FAD4D8] text-[#E11D48] text-xs sm:text-[15px] font-semibold shadow-2xs transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-base">logout</span>
-                  Sign Out
+                  <span className="material-symbols-outlined text-[16px] sm:text-[20px]">
+                    logout
+                  </span>
+                  <span>Sign Out</span>
                 </button>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Customer Order Tracking View */}
-        <section
-          ref={ordersSectionRef}
-          className="bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-sm p-5 sm:p-8 space-y-5"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-outline-variant/40 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-xl">local_shipping</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-lg sm:text-xl font-headline font-bold text-on-surface">
-                    My Order Tracking &amp; History
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold tabular-nums">
-                    {customerOrders.length} {customerOrders.length === 1 ? 'Order' : 'Orders'}
-                  </span>
-                </div>
-                <p className="text-xs text-on-surface-variant mt-0.5">
-                  Track your live patisserie order preparation status from kitchen to doorstep.
-                </p>
-              </div>
-            </div>
+        {/* Toggleable Profile Section: Personal Details | Orders & Tracking */}
+        <section ref={ordersSectionRef} className="space-y-3 sm:space-y-4">
+          {/* Flat Segmented Pill Toggle Bar */}
+          <div className="w-full bg-white rounded-full p-1.5 border border-[#F1ECFA] shadow-[0_2px_10px_rgba(83,52,153,0.06)] grid grid-cols-2 items-center gap-1.5 select-none">
+            <button
+              type="button"
+              onClick={() => setActiveProfileTab('details')}
+              className={`flex items-center justify-center gap-2 py-2 px-3 sm:px-5 rounded-full text-xs sm:text-sm transition-colors cursor-pointer ${
+                activeProfileTab === 'details'
+                  ? 'bg-[#533499] text-white font-semibold'
+                  : 'bg-transparent text-[#64748B] hover:text-[#1E1B4B] font-medium'
+              }`}
+            >
+              <svg
+                className="w-4 h-4 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <span>Personal Details</span>
+            </button>
 
             <button
               type="button"
-              onClick={loadCustomerOrders}
-              disabled={isLoadingOrders}
-              className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold border border-outline-variant/50 transition-all cursor-pointer disabled:opacity-50"
+              onClick={() => setActiveProfileTab('orders')}
+              className={`flex items-center justify-center gap-2 py-2 px-3 sm:px-5 rounded-full text-xs sm:text-sm transition-colors cursor-pointer ${
+                activeProfileTab === 'orders'
+                  ? 'bg-[#533499] text-white font-semibold'
+                  : 'bg-transparent text-[#64748B] hover:text-[#1E1B4B] font-medium'
+              }`}
             >
-              <span
-                className={`material-symbols-outlined text-sm text-primary ${
-                  isLoadingOrders ? 'animate-spin' : ''
-                }`}
+              <svg
+                className="w-4 h-4 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                sync
-              </span>
-              <span>{isLoadingOrders ? 'Refreshing...' : 'Refresh Status'}</span>
+                <rect x="5" y="4" width="14" height="17" rx="2" />
+                <path d="M9 4.5h6" />
+                <path d="M12 3v1.5" />
+              </svg>
+              <span>Track Orders ({customerOrders.length})</span>
             </button>
           </div>
 
-          {customerOrders.length === 0 ? (
-            <div className="rounded-2xl bg-surface-container-low/60 border border-outline-variant/40 p-6 sm:p-8 text-center space-y-3">
-              <span className="material-symbols-outlined text-3xl text-primary/70">
-                receipt_long
-              </span>
-              <div className="space-y-1">
-                <h3 className="text-sm sm:text-base font-bold text-on-surface">
-                  No orders placed yet
-                </h3>
-                <p className="text-xs text-on-surface-variant max-w-md mx-auto">
-                  Once you place a signature cake or custom cake order, your live order status (Pending, Baking, Delivered) will appear right here.
-                </p>
-              </div>
-              <div className="pt-1 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('storefront')}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">cake</span>
-                  <span>Explore Signature Cakes</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenConfigurator}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-surface border border-outline-variant text-on-surface text-xs font-bold hover:bg-surface-container transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm text-primary">palette</span>
-                  <span>Design Custom Cake</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {customerOrders.map((ord) => {
-                const stepIndex =
-                  ord.status === 'Delivered' ? 3 : ord.status === 'Baking' ? 2 : 1;
-                const steps = [
-                  { idx: 1, label: 'Pending', sub: 'Order Received', icon: 'schedule' },
-                  { idx: 2, label: 'Baking', sub: 'In Patisserie Oven', icon: 'skillet' },
-                  { idx: 3, label: 'Delivered', sub: 'Ready / Handed Over', icon: 'verified' },
-                ];
+          {activeProfileTab === 'orders' && (
+            <div className="space-y-4 sm:space-y-5">
+              {/* Header Card matching reference image */}
+              <div className="bg-white rounded-[28px] border border-[#EFEAFA] shadow-[0_10px_30px_-10px_rgba(85,52,153,0.1)] p-5 sm:p-7 space-y-4">
+                <div className="flex items-start gap-3.5 sm:gap-4">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F0FF] text-[#553499] flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[22px] sm:text-2xl">
+                      local_shipping
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-lg sm:text-2xl font-headline font-bold text-[#14121E] leading-tight">
+                      My Order Tracking &amp; History
+                    </h2>
+                    <span className="inline-flex items-center px-3 py-0.5 rounded-full bg-[#F3EEFF] text-[#553499] text-[11px] sm:text-xs font-bold mt-1.5 tabular-nums">
+                      {customerOrders.length}{' '}
+                      {customerOrders.length === 1 ? 'Order Found' : 'Orders Found'}
+                    </span>
+                    <p className="text-xs sm:text-sm text-[#6E6A7C] leading-relaxed mt-2">
+                      Track your live patisserie order preparation status from kitchen to doorstep.
+                    </p>
+                  </div>
+                </div>
 
-                return (
-                  <div
-                    key={ord.id}
-                    className="rounded-2xl bg-surface border border-outline-variant/50 p-4 sm:p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-4"
+                <button
+                  type="button"
+                  onClick={loadCustomerOrders}
+                  disabled={isLoadingOrders}
+                  className="w-full py-2.5 sm:py-3 px-4 rounded-2xl bg-[#FAF8FF] hover:bg-[#F2ECFF] border border-[#EFE9FC] text-[#553499] text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <span
+                    className={`material-symbols-outlined text-[18px] ${
+                      isLoadingOrders ? 'animate-spin' : ''
+                    }`}
                   >
-                    <div className="space-y-3">
-                      {/* Top Row: Order ID, Date & Live Status Badge */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-xs sm:text-sm text-primary tabular-nums">
-                              {ord.id}
-                            </span>
-                            <span className="text-[11px] text-on-surface-variant tabular-nums">
-                              • {ord.date}
-                              {ord.timeOfIssue && ord.timeOfIssue !== '—'
-                                ? ` (${ord.timeOfIssue})`
-                                : ''}
+                    sync
+                  </span>
+                  <span>{isLoadingOrders ? 'Refreshing...' : 'Refresh Status'}</span>
+                </button>
+              </div>
+
+              {/* Order Cards List */}
+              {customerOrders.length === 0 ? (
+                <div className="bg-white rounded-[28px] border border-[#EFEAFA] shadow-[0_10px_30px_-10px_rgba(85,52,153,0.1)] p-6 sm:p-10 text-center space-y-3">
+                  <span className="material-symbols-outlined text-3xl text-[#553499]/70">
+                    receipt_long
+                  </span>
+                  <div className="space-y-1">
+                    <h3 className="text-sm sm:text-base font-bold text-[#14121E]">
+                      No orders placed yet
+                    </h3>
+                    <p className="text-xs sm:text-sm text-[#6E6A7C] max-w-md mx-auto">
+                      Once you place a signature cake or custom cake order, your live order status (Pending, Baking, Delivered) will appear right here.
+                    </p>
+                  </div>
+                  <div className="pt-1 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('storefront')}
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#553499] text-white text-xs font-bold shadow-xs hover:opacity-95 transition-opacity cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">cake</span>
+                      <span>Explore Signature Cakes</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onOpenConfigurator}
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#F7F3FF] border border-[#EDE5FC] text-[#553499] text-xs font-bold hover:bg-[#EFE8FF] transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">palette</span>
+                      <span>Design Custom Cake</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                  {customerOrders.map((ord) => {
+                    const stepIndex =
+                      ord.status === 'Delivered' ? 3 : ord.status === 'Baking' ? 2 : 1;
+                    const steps = [
+                      { idx: 1, label: 'Pending', sub: 'Order Received', icon: 'schedule' },
+                      {
+                        idx: 2,
+                        label: 'Baking',
+                        sub: 'In Patisserie Oven',
+                        icon: 'local_fire_department',
+                      },
+                      {
+                        idx: 3,
+                        label: 'Delivered',
+                        sub: 'Ready / Handed Over',
+                        icon: 'check_circle',
+                      },
+                    ];
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className="bg-white rounded-[28px] border border-[#EFEAFA] shadow-[0_10px_30px_-10px_rgba(85,52,153,0.1)] p-5 sm:p-6 flex flex-col justify-between gap-4 transition-all hover:shadow-[0_14px_34px_-10px_rgba(85,52,153,0.16)]"
+                      >
+                        <div className="space-y-3.5">
+                          {/* Top Row: Order ID + Date/Time on Left, Status Pill on Right */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-sm sm:text-base text-[#553499] tabular-nums">
+                                  {ord.id}
+                                </span>
+                                <span className="text-xs sm:text-sm text-[#787486] tabular-nums">
+                                  • {ord.date}
+                                </span>
+                              </div>
+                              {ord.timeOfIssue && ord.timeOfIssue !== '—' && (
+                                <span className="block text-[11px] sm:text-xs text-[#8E8A9D] tabular-nums mt-0.5">
+                                  ({ord.timeOfIssue})
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Status Pill Badge matching reference */}
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold shrink-0 border ${
+                                ord.status === 'Delivered'
+                                  ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#047857]'
+                                  : ord.status === 'Baking'
+                                  ? 'bg-[#F5F0FF] border-[#DDD6FE] text-[#553499]'
+                                  : 'bg-[#FFFBEB] border-[#FDE68A] text-[#B45309]'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[15px] leading-none">
+                                {ord.status === 'Delivered'
+                                  ? 'check_circle'
+                                  : ord.status === 'Baking'
+                                  ? 'local_fire_department'
+                                  : 'schedule'}
+                              </span>
+                              <span>{ord.status || 'Pending'}</span>
                             </span>
                           </div>
-                          <h3 className="font-headline font-bold text-sm sm:text-base text-on-surface mt-1 leading-snug">
-                            {ord.cakeItem}
-                          </h3>
-                        </div>
 
-                        {/* Status Badge */}
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 ${
-                            ord.status === 'Delivered'
-                              ? 'bg-emerald-500/15 text-emerald-800'
-                              : ord.status === 'Baking'
-                              ? 'bg-primary/15 text-primary'
-                              : 'bg-amber-500/15 text-amber-800'
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-xs">
-                            {ord.status === 'Delivered'
-                              ? 'check_circle'
-                              : ord.status === 'Baking'
-                              ? 'local_fire_department'
-                              : 'hourglass_top'}
-                          </span>
-                          <span>{ord.status}</span>
-                        </span>
-                      </div>
+                          {/* Cake Name & Type Details */}
+                          <div>
+                            <h3 className="font-headline font-bold text-base sm:text-lg text-[#14121E] leading-snug">
+                              {ord.cakeItem}
+                            </h3>
+                            {ord.cakeTypeDetail && (
+                              <p className="text-xs sm:text-sm text-[#6E6A7C] leading-relaxed mt-1">
+                                {ord.cakeTypeDetail}
+                              </p>
+                            )}
+                          </div>
 
-                      {ord.cakeTypeDetail && (
-                        <p className="text-[11px] sm:text-xs text-on-surface-variant leading-relaxed line-clamp-2">
-                          {ord.cakeTypeDetail}
-                        </p>
-                      )}
-
-                      {/* 3-Step Visual Progress Tracker */}
-                      <div className="pt-2">
-                        <div className="grid grid-cols-3 gap-2 relative">
-                          {steps.map((step) => {
-                            const isCompleted = stepIndex >= step.idx;
-                            const isCurrent = stepIndex === step.idx;
-                            return (
-                              <div
-                                key={step.label}
-                                className={`rounded-xl p-2 border transition-all ${
-                                  isCurrent
-                                    ? 'bg-primary/10 border-primary/40 text-primary'
-                                    : isCompleted
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
-                                    : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant opacity-65'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <span className="material-symbols-outlined text-sm">
+                          {/* 3-Step Centered Progress Cards */}
+                          <div className="grid grid-cols-3 gap-2.5 sm:gap-3 pt-1">
+                            {steps.map((step) => {
+                              const isCompleted = stepIndex >= step.idx;
+                              const isCurrent = stepIndex === step.idx;
+                              return (
+                                <div
+                                  key={step.label}
+                                  className={`rounded-2xl px-2 py-3 border text-center flex flex-col items-center justify-center transition-all min-w-0 ${
+                                    isCurrent
+                                      ? 'bg-[#F6F2FF] border-[#C4B5FD]'
+                                      : isCompleted
+                                      ? 'bg-[#ECFDF5]/70 border-[#A7F3D0]'
+                                      : 'bg-[#FAFAFC] border-[#F1F0F5]'
+                                  }`}
+                                >
+                                  <span
+                                    className={`material-symbols-outlined text-[18px] sm:text-[20px] mb-1 ${
+                                      isCurrent
+                                        ? 'text-[#553499]'
+                                        : isCompleted
+                                        ? 'text-[#047857]'
+                                        : 'text-[#94A3B8]'
+                                    }`}
+                                  >
                                     {isCompleted && !isCurrent ? 'check_circle' : step.icon}
                                   </span>
-                                  <span className="text-[11px] font-bold leading-none">
+                                  <span
+                                    className={`text-xs sm:text-sm leading-tight ${
+                                      isCurrent
+                                        ? 'font-bold text-[#14121E]'
+                                        : isCompleted
+                                        ? 'font-bold text-[#065F46]'
+                                        : 'font-medium text-[#64748B]'
+                                    }`}
+                                  >
                                     {step.label}
                                   </span>
+                                  <p
+                                    className={`text-[10px] sm:text-[11px] mt-0.5 w-full truncate ${
+                                      isCurrent
+                                        ? 'text-[#6E6A7C]'
+                                        : isCompleted
+                                        ? 'text-[#047857]/80'
+                                        : 'text-[#94A3B8]'
+                                    }`}
+                                  >
+                                    {step.sub}
+                                  </p>
                                 </div>
-                                <p className="text-[9.5px] mt-1 leading-tight opacity-85 truncate">
-                                  {step.sub}
-                                </p>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Footer: Order Total */}
+                        <div className="pt-3.5 border-t border-[#F1EEF9] flex items-center justify-between">
+                          <span className="text-xs sm:text-sm text-[#6E6A7C] font-medium">
+                            {ord.amount > 0
+                              ? 'Order Total (incl. GST)'
+                              : 'Custom Cake Consultation'}
+                          </span>
+                          <span className="font-black text-lg sm:text-xl text-[#14121E] tabular-nums">
+                            {ord.amount > 0
+                              ? `₹${Number(ord.amount).toLocaleString('en-IN')}`
+                              : 'Bespoke Quote'}
+                          </span>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Footer: Total Amount */}
-                    <div className="pt-3 border-t border-outline-variant/30 flex items-center justify-between text-xs">
-                      <span className="text-on-surface-variant font-medium">
-                        {ord.amount > 0 ? 'Order Total (incl. GST)' : 'Custom Cake Consultation'}
-                      </span>
-                      <span className="font-bold text-sm text-on-surface tabular-nums">
-                        {ord.amount > 0
-                          ? `₹${Number(ord.amount).toLocaleString('en-IN')}`
-                          : 'Bespoke Quote'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>
 
-        {/* Add Your Profile Form Section */}
-        <div className="w-full">
-          <section
-            ref={formSectionRef}
-            className="bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-sm p-6 sm:p-8 space-y-6"
-          >
+        {/* Add Your Profile Form Section (Displayed when Personal Details tab is active) */}
+        {activeProfileTab === 'details' && (
+          <div className="w-full">
+            <section
+              ref={formSectionRef}
+              className="bg-surface-container-lowest rounded-3xl border border-outline-variant/60 shadow-sm p-6 sm:p-8 space-y-6"
+            >
             <div className="flex items-center justify-between border-b border-outline-variant/40 pb-4">
               <div>
                 <h2 className="text-lg sm:text-xl font-headline font-bold text-on-surface">
@@ -942,6 +1081,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
             </form>
           </section>
         </div>
+        )}
       </main>
     </div>
   );
