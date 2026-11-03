@@ -136,7 +136,7 @@ export default function App() {
               access_token: session.access_token,
               refresh_token: session.refresh_token,
             },
-            '*'
+            window.location.origin
           );
           window.close();
           return;
@@ -773,7 +773,7 @@ export default function App() {
         />
       )}
 
-      {currentScreen === 'profile' && (
+      {currentScreen === 'profile' && currentUser && (
         <UserProfile
           user={currentUser}
           cartItems={cartItems}
@@ -788,7 +788,7 @@ export default function App() {
         />
       )}
 
-      {currentScreen === 'dashboard' && (!currentUser || currentUser.role === 'Admin') && (
+      {currentScreen === 'dashboard' && currentUser?.role === 'Admin' && (
         <AdminDashboard
           onNavigate={(screen) => navigateTo(screen)}
           onOpenNewCustomOrder={() => {

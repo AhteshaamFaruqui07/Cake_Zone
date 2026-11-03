@@ -430,15 +430,15 @@ export const UserProfile: React.FC<UserProfileProps> = ({
 
           <div className={`p-5 sm:p-8 ${coverImage ? 'pt-3 sm:pt-5' : ''}`}>
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 sm:gap-6">
-              <div className="flex items-center gap-3.5 sm:gap-5 w-full md:w-auto">
+              <div className="flex items-start gap-3.5 sm:gap-5 w-full md:w-auto">
                 {coverImage ? (
                   <img
                     src={coverImage}
                     alt={fullName || 'Profile'}
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-md border-2 border-surface -mt-4 sm:-mt-5 relative z-10 bg-surface shrink-0"
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-md border-2 border-surface self-start mt-0.5 relative z-10 bg-surface shrink-0"
                   />
                 ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold text-2xl sm:text-3xl shadow-md border border-primary/20 shrink-0">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold text-2xl sm:text-3xl shadow-md border border-primary/20 self-start mt-0.5 shrink-0">
                     {(fullName.slice(0, 2) || user?.initials || 'CZ').toUpperCase()}
                   </div>
                 )}
@@ -665,7 +665,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                       No orders placed yet
                     </h3>
                     <p className="text-xs sm:text-sm text-[#6E6A7C] max-w-md mx-auto">
-                      Once you place a signature cake or custom cake order, your live order status (Pending, Baking, Delivered) will appear right here.
+                      Once you place a signature cake or custom cake order, your live order status (Pending, Baking, Ready) will appear right here.
                     </p>
                   </div>
                   <div className="pt-1 flex flex-wrap items-center justify-center gap-3">
@@ -691,29 +691,48 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                   {customerOrders.map((ord) => {
                     const stepIndex =
-                      ord.status === 'Delivered' ? 3 : ord.status === 'Baking' ? 2 : 1;
+                      ord.status === 'Ready' ? 3 : ord.status === 'Baking' ? 2 : 1;
+                    const formattedOrderTime =
+                      ord.timeOfIssue && ord.timeOfIssue !== '—'
+                        ? ord.timeOfIssue
+                            .replace(/(\d{1,2}:\d{2}):\d{2}\s*(am|pm)/i, '$1 $2')
+                            .toLowerCase()
+                        : ord.date;
                     const steps = [
-                      { idx: 1, label: 'Pending', sub: 'Order Received', icon: 'schedule' },
+                      {
+                        idx: 1,
+                        label: 'Pending',
+                        line2: 'Received',
+                        line3: formattedOrderTime,
+                        icon: 'assignment',
+                      },
                       {
                         idx: 2,
                         label: 'Baking',
-                        sub: 'In Patisserie Oven',
+                        line2:
+                          stepIndex === 2
+                            ? 'Active Now'
+                            : stepIndex > 2
+                            ? 'Baked'
+                            : 'Pending',
+                        line3: stepIndex > 2 ? 'Completed' : 'In Oven',
                         icon: 'local_fire_department',
                       },
                       {
                         idx: 3,
-                        label: 'Delivered',
-                        sub: 'Ready / Handed Over',
-                        icon: 'check_circle',
+                        label: 'Ready',
+                        line2: 'Ready for Pickup',
+                        line3: stepIndex === 3 ? 'Completed' : 'Pending',
+                        icon: 'check',
                       },
                     ];
 
                     return (
                       <div
                         key={ord.id}
-                        className="bg-white rounded-[28px] border border-[#EFEAFA] shadow-[0_10px_30px_-10px_rgba(85,52,153,0.1)] p-5 sm:p-6 flex flex-col justify-between gap-4 transition-all hover:shadow-[0_14px_34px_-10px_rgba(85,52,153,0.16)]"
+                        className="bg-white rounded-[28px] border border-[#EFEAFA] shadow-[0_10px_30px_-10px_rgba(85,52,153,0.1)] p-5 sm:p-6 flex flex-col justify-between gap-4 transition-all hover:shadow-[0_14px_34px_-10px_rgba(85,52,153,0.16)] min-w-0 overflow-hidden"
                       >
-                        <div className="space-y-3.5">
+                        <div className="space-y-3.5 min-w-0">
                           {/* Top Row: Order ID + Date/Time on Left, Status Pill on Right */}
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -735,7 +754,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                             {/* Status Pill Badge matching reference */}
                             <span
                               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold shrink-0 border ${
-                                ord.status === 'Delivered'
+                                ord.status === 'Ready'
                                   ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#047857]'
                                   : ord.status === 'Baking'
                                   ? 'bg-[#F5F0FF] border-[#DDD6FE] text-[#553499]'
@@ -743,7 +762,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                               }`}
                             >
                               <span className="material-symbols-outlined text-[15px] leading-none">
-                                {ord.status === 'Delivered'
+                                {ord.status === 'Ready'
                                   ? 'check_circle'
                                   : ord.status === 'Baking'
                                   ? 'local_fire_department'
@@ -754,69 +773,124 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                           </div>
 
                           {/* Cake Name & Type Details */}
-                          <div>
-                            <h3 className="font-headline font-bold text-base sm:text-lg text-[#14121E] leading-snug">
+                          <div className="min-w-0 max-w-full overflow-hidden">
+                            <h3 className="font-headline font-bold text-base sm:text-lg text-[#14121E] leading-snug break-words [overflow-wrap:anywhere]">
                               {ord.cakeItem}
                             </h3>
                             {ord.cakeTypeDetail && (
-                              <p className="text-xs sm:text-sm text-[#6E6A7C] leading-relaxed mt-1">
+                              <p className="text-xs sm:text-sm text-[#6E6A7C] leading-relaxed mt-1 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
                                 {ord.cakeTypeDetail}
                               </p>
                             )}
                           </div>
 
-                          {/* 3-Step Centered Progress Cards */}
-                          <div className="grid grid-cols-3 gap-2.5 sm:gap-3 pt-1">
-                            {steps.map((step) => {
-                              const isCompleted = stepIndex >= step.idx;
-                              const isCurrent = stepIndex === step.idx;
-                              return (
-                                <div
-                                  key={step.label}
-                                  className={`rounded-2xl px-2 py-3 border text-center flex flex-col items-center justify-center transition-all min-w-0 ${
-                                    isCurrent
-                                      ? 'bg-[#F6F2FF] border-[#C4B5FD]'
-                                      : isCompleted
-                                      ? 'bg-[#ECFDF5]/70 border-[#A7F3D0]'
-                                      : 'bg-[#FAFAFC] border-[#F1F0F5]'
-                                  }`}
-                                >
-                                  <span
-                                    className={`material-symbols-outlined text-[18px] sm:text-[20px] mb-1 ${
-                                      isCurrent
-                                        ? 'text-[#553499]'
-                                        : isCompleted
-                                        ? 'text-[#047857]'
-                                        : 'text-[#94A3B8]'
-                                    }`}
+                          {/* 3-Step Circular Progress Stepper */}
+                          <div className="relative pt-3 pb-1">
+                            {/* Horizontal Connecting Track */}
+                            <div className="absolute left-[6%] right-[6%] top-[36px] sm:top-[38px] h-1.5 rounded-full bg-[#EEF0F6] overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  stepIndex === 1
+                                    ? 'w-[24%] bg-gradient-to-r from-[#F5B014] to-[#5B34C9]'
+                                    : stepIndex === 2
+                                    ? 'w-[57%] bg-gradient-to-r from-[#F5B014] via-[#5B34C9] to-[#F59E0B]'
+                                    : 'w-full bg-gradient-to-r from-[#F5B014] via-[#5B34C9] to-[#0FA976]'
+                                }`}
+                              />
+                            </div>
+
+                            {/* 3 Step Columns */}
+                            <div className="relative z-10 grid grid-cols-3 gap-2">
+                              {steps.map((step) => {
+                                const isPendingYellow = step.idx === 1;
+                                const isBakingPurple =
+                                  step.idx === 2 && stepIndex >= 2;
+                                const isReadyGreen =
+                                  step.idx === 3 && stepIndex === 3;
+                                const isActivePending =
+                                  step.idx === 1 && stepIndex === 1;
+
+                                return (
+                                  <div
+                                    key={step.label}
+                                    className="flex flex-col items-center text-center min-w-0"
                                   >
-                                    {isCompleted && !isCurrent ? 'check_circle' : step.icon}
-                                  </span>
-                                  <span
-                                    className={`text-xs sm:text-sm leading-tight ${
-                                      isCurrent
-                                        ? 'font-bold text-[#14121E]'
-                                        : isCompleted
-                                        ? 'font-bold text-[#065F46]'
-                                        : 'font-medium text-[#64748B]'
-                                    }`}
-                                  >
-                                    {step.label}
-                                  </span>
-                                  <p
-                                    className={`text-[10px] sm:text-[11px] mt-0.5 w-full truncate ${
-                                      isCurrent
-                                        ? 'text-[#6E6A7C]'
-                                        : isCompleted
-                                        ? 'text-[#047857]/80'
-                                        : 'text-[#94A3B8]'
-                                    }`}
-                                  >
-                                    {step.sub}
-                                  </p>
-                                </div>
-                              );
-                            })}
+                                    {/* Circular Step Node */}
+                                    <div className="relative mb-2.5 flex items-center justify-center">
+                                      <div
+                                        className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
+                                          isPendingYellow
+                                            ? 'bg-[#F5B014] text-white ring-[5px] ring-[#FEF3C7] shadow-[0_6px_16px_rgba(245,176,20,0.28)]'
+                                            : isBakingPurple
+                                            ? 'bg-[#48269D] text-[#F7C61B] ring-[5px] ring-[#EBE3FF] shadow-[0_6px_16px_rgba(72,38,157,0.28)]'
+                                            : isReadyGreen
+                                            ? 'bg-[#0FA976] text-white ring-[5px] ring-[#E6F8F2] shadow-[0_6px_16px_rgba(15,169,118,0.2)]'
+                                            : 'bg-[#F8FAFC] text-[#94A3B8] border-2 border-[#E2E8F0] ring-4 ring-white'
+                                        }`}
+                                      >
+                                        <span
+                                          className={`material-symbols-outlined text-[22px] sm:text-[24px] ${
+                                            isBakingPurple
+                                              ? "[font-variation-settings:'FILL'_1]"
+                                              : ''
+                                          }`}
+                                        >
+                                          {step.icon}
+                                        </span>
+                                      </div>
+
+                                      {/* Active / Baking Status Dot on Top-Right */}
+                                      {(isBakingPurple || isActivePending) && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#F5B014] border-[2.5px] border-white shadow-sm" />
+                                      )}
+                                    </div>
+
+                                    {/* Line 1: Step Title */}
+                                    <span
+                                      className={`text-sm sm:text-[15px] font-bold leading-tight ${
+                                        isPendingYellow
+                                          ? 'text-[#92400E]'
+                                          : isBakingPurple
+                                          ? 'text-[#1E1042]'
+                                          : isReadyGreen
+                                          ? 'text-[#065F46]'
+                                          : 'text-[#64748B]'
+                                      }`}
+                                    >
+                                      {step.label}
+                                    </span>
+
+                                    {/* Line 2: Primary Subtitle */}
+                                    <span
+                                      className={`text-[11px] sm:text-xs mt-0.5 leading-tight ${
+                                        isPendingYellow
+                                          ? 'font-semibold text-[#D97706]'
+                                          : isBakingPurple
+                                          ? 'font-bold text-[#48269D]'
+                                          : isReadyGreen
+                                          ? 'font-semibold text-[#0FA976]'
+                                          : 'font-medium text-[#94A3B8]'
+                                      }`}
+                                    >
+                                      {step.line2}
+                                    </span>
+
+                                    {/* Line 3: Secondary Meta / Time */}
+                                    <span
+                                      className={`text-[10px] sm:text-[11px] mt-0.5 leading-tight tabular-nums ${
+                                        isBakingPurple
+                                          ? 'font-medium text-[#6D28D9]'
+                                          : isReadyGreen
+                                          ? 'font-medium text-[#0FA976]'
+                                          : 'text-[#94A3B8]'
+                                      }`}
+                                    >
+                                      {step.line3}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
 

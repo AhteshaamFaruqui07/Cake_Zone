@@ -163,7 +163,7 @@ export const INITIAL_ORDERS: Order[] = [
     customer: 'Sophia Loren',
     cakeItem: 'Classic French Opera Cake',
     date: 'Yesterday, 4:15 PM',
-    status: 'Delivered',
+    status: 'Ready',
     amount: 85.00
   },
   {
@@ -171,7 +171,7 @@ export const INITIAL_ORDERS: Order[] = [
     customer: 'Liam Hemsworth',
     cakeItem: 'Matcha Green Tea Chiffon',
     date: 'Yesterday, 1:20 PM',
-    status: 'Delivered',
+    status: 'Ready',
     amount: 65.00
   },
   {
@@ -179,7 +179,7 @@ export const INITIAL_ORDERS: Order[] = [
     customer: 'Olivia Wilde',
     cakeItem: 'Salted Caramel Macaron Tower',
     date: 'Oct 24, 2027',
-    status: 'Delivered',
+    status: 'Ready',
     amount: 210.00
   }
 ];

@@ -35,7 +35,7 @@ export interface CartItem {
   };
 }
 
-export type OrderStatus = 'Pending' | 'Baking' | 'Delivered';
+export type OrderStatus = 'Pending' | 'Baking' | 'Ready';
 
 export interface Order {
   id: string;

@@ -1,22 +1,32 @@
 import { createClient } from "@supabase/supabase-js";
 
 // ============================================================================
-// 1. Paste your Supabase Project URL here:
+// 1. Load Supabase Project URL from Environment Variables (with safe fallback):
 // ============================================================================
-const RAW_URL = "https://ldalvawsbuznlplwjhas.supabase.co";
+const RAW_URL =
+  import.meta.env.VITE_SUPABASE_URL || "https://ldalvawsbuznlplwjhas.supabase.co";
 
 // Automatically sanitizes URL if a REST endpoint or trailing slash was pasted
 const SUPABASE_URL = RAW_URL.replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
 
 // ============================================================================
-// 2. Paste your Supabase Anon / Public Key here:
+// 2. Load Supabase Publishable Anon Key from Environment Variables:
+//    (Never expose a service_role secret key in client-side code)
 // ============================================================================
-const SUPABASE_PUBLIC_KEY = "sb_publishable_h0GaOUO53tBrG95yWRy8sQ_nVr7tnM1";
+const SUPABASE_PUBLIC_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "sb_publishable_h0GaOUO53tBrG95yWRy8sQ_nVr7tnM1";
 
 // ============================================================================
-// Initialize and export the Supabase client
+// Initialize and export the Supabase client with secure session settings
 // ============================================================================
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 
 // ============================================================================

@@ -76,7 +76,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onCustomCakeSettingsChange,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'Dashboard' | 'Orders' | 'Products' | 'Gallery' | 'Customers' | 'Settings'
+    'Dashboard' | 'Orders' | 'Products' | 'Gallery' | 'Customers' | 'Settings' | 'Statistics'
   >('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All Statuses');
@@ -191,6 +191,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   >('All Time');
   const [showTimeframeDropdown, setShowTimeframeDropdown] = useState(false);
   const [showDashboardMenu, setShowDashboardMenu] = useState(false);
+  const [selectedStatDay, setSelectedStatDay] = useState<string>('All');
 
   // Logged-In Users table horizontal scroll & drawer state
   const usersTableScrollRef = useRef<HTMLDivElement | null>(null);
@@ -198,7 +199,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedUserDrawer, setSelectedUserDrawer] = useState<LoggedInUserRecord | null>(null);
 
   const navigateToTab = (
-    tab: 'Dashboard' | 'Orders' | 'Products' | 'Gallery' | 'Customers' | 'Settings'
+    tab: 'Dashboard' | 'Orders' | 'Products' | 'Gallery' | 'Customers' | 'Settings' | 'Statistics'
   ) => {
     setActiveTab(tab);
     setShowDashboardMenu(false);
@@ -501,6 +502,180 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }, [loggedInUsers, searchQuery]);
 
+  // Day-wise user login statistics (100% Real Data from Supabase profiles, auth sessions & orders)
+  const dayWiseLoginStats = useMemo(() => {
+    const dayDefinitions = [
+      { short: 'Mon', full: 'Monday', jsDay: 1 },
+      { short: 'Tue', full: 'Tuesday', jsDay: 2 },
+      { short: 'Wed', full: 'Wednesday', jsDay: 3 },
+      { short: 'Thu', full: 'Thursday', jsDay: 4 },
+      { short: 'Fri', full: 'Friday', jsDay: 5 },
+      { short: 'Sat', full: 'Saturday', jsDay: 6 },
+      { short: 'Sun', full: 'Sunday', jsDay: 0 },
+    ];
+
+    // Calculate current week dates for Mon - Sun
+    const now = new Date();
+    const currentJsDay = now.getDay();
+    const diffToMonday = currentJsDay === 0 ? -6 : 1 - currentJsDay;
+    const mondayOfThisWeek = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + diffToMonday,
+      0,
+      0,
+      0,
+      0
+    );
+
+    const weekDayDates: Record<string, string> = {};
+    dayDefinitions.forEach((d, idx) => {
+      const dt = new Date(mondayOfThisWeek);
+      dt.setDate(mondayOfThisWeek.getDate() + idx);
+      weekDayDates[d.short] = dt.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+      });
+    });
+
+    const usersByDayShort: Record<string, LoggedInUserRecord[]> = {
+      Mon: [],
+      Tue: [],
+      Wed: [],
+      Thu: [],
+      Fri: [],
+      Sat: [],
+      Sun: [],
+    };
+
+    const ordersByDayShort: Record<string, number> = {
+      Mon: 0,
+      Tue: 0,
+      Wed: 0,
+      Thu: 0,
+      Fri: 0,
+      Sat: 0,
+      Sun: 0,
+    };
+
+    const dateGroupsMap = new Map<
+      string,
+      {
+        dateKey: string;
+        label: string;
+        dayName: string;
+        count: number;
+        users: LoggedInUserRecord[];
+      }
+    >();
+
+    let loginsThisWeekCount = 0;
+    const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+
+    loggedInUsers.forEach((user) => {
+      const parsed = user.lastLoginAt ? new Date(user.lastLoginAt) : new Date();
+      const validDate = !isNaN(parsed.getTime()) ? parsed : new Date();
+      if (validDate >= sevenDaysAgo) {
+        loginsThisWeekCount += 1;
+      }
+      const jsDay = validDate.getDay();
+      const matchedDay = dayDefinitions.find((d) => d.jsDay === jsDay) || dayDefinitions[0];
+      usersByDayShort[matchedDay.short].push(user);
+
+      const yyyy = validDate.getFullYear();
+      const mm = String(validDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(validDate.getDate()).padStart(2, '0');
+      const dateKey = `${yyyy}-${mm}-${dd}`;
+      const formattedLabel = validDate.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+
+      const existing = dateGroupsMap.get(dateKey);
+      if (existing) {
+        existing.count += 1;
+        existing.users.push(user);
+      } else {
+        dateGroupsMap.set(dateKey, {
+          dateKey,
+          label: formattedLabel,
+          dayName: matchedDay.full,
+          count: 1,
+          users: [user],
+        });
+      }
+    });
+
+    orders.forEach((ord) => {
+      const rawDate = ord.createdAt || ord.date;
+      if (!rawDate || rawDate === '—') return;
+      const parsed = new Date(rawDate);
+      if (isNaN(parsed.getTime())) return;
+      const matchedDay =
+        dayDefinitions.find((d) => d.jsDay === parsed.getDay()) || dayDefinitions[0];
+      ordersByDayShort[matchedDay.short] += 1;
+    });
+
+    const bars = dayDefinitions.map((d) => ({
+      short: d.short,
+      full: d.full,
+      dateLabel: weekDayDates[d.short],
+      count: usersByDayShort[d.short].length,
+      orderCount: ordersByDayShort[d.short],
+      users: usersByDayShort[d.short],
+    }));
+
+    const totalActive = loggedInUsers.length;
+
+    const maxBar = bars.reduce(
+      (best, cur) => (cur.count > best.count ? cur : best),
+      bars[0] || {
+        short: 'Mon',
+        full: 'Monday',
+        dateLabel: '',
+        count: 0,
+        orderCount: 0,
+        users: [],
+      }
+    );
+
+    const activeDaysCount = Math.max(1, bars.filter((b) => b.count > 0).length);
+    const avgPerDay =
+      totalActive > 0 ? Number((totalActive / activeDaysCount).toFixed(1)) : 0;
+
+    const dateBreakdown = Array.from(dateGroupsMap.values()).sort((a, b) =>
+      b.dateKey.localeCompare(a.dateKey)
+    );
+
+    const customerCount = loggedInUsers.filter((u) => u.role !== 'Admin').length;
+    const adminCount = loggedInUsers.filter((u) => u.role === 'Admin').length;
+    const customerPercent =
+      loggedInUsers.length > 0
+        ? Math.round((customerCount / loggedInUsers.length) * 100)
+        : 0;
+
+    const activeWeekPercent =
+      totalActive > 0 ? Math.round((loginsThisWeekCount / totalActive) * 100) : 0;
+
+    return {
+      bars,
+      totalActive,
+      peakDayFull: maxBar.count > 0 ? maxBar.full : 'No Logins Yet',
+      peakDayShort: maxBar.short,
+      peakCount: maxBar.count,
+      avgPerDay,
+      activeDaysCount,
+      dateBreakdown,
+      usersByDayShort,
+      customerCount,
+      adminCount,
+      customerPercent,
+      activeWeekPercent,
+      loginsThisWeekCount,
+    };
+  }, [loggedInUsers, orders]);
+
   // Filtered saved user profiles
   const filteredSavedProfiles = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -619,13 +794,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // HANDLERS: ORDERS (Status Update & Custom Cake Price Edit)
   // ==========================================================================
   const handleSetOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    const targetOrder = orders.find((ord) => ord.id === orderId);
     setOrders((prev) =>
       prev.map((ord) => (ord.id === orderId ? { ...ord, status: newStatus } : ord))
     );
-    await updateOrderStatusInDb(orderId, newStatus);
-    showFeedback(
-      `Order ${orderId} status updated to ${newStatus} (synced with User Profile).`
-    );
+    const { emailResult } = await updateOrderStatusInDb(orderId, newStatus, targetOrder);
+    if (newStatus === 'Ready') {
+      if (emailResult?.sent) {
+        showFeedback(
+          `Order ${orderId} is Ready! Email automatically sent to ${emailResult.recipient} via ${emailResult.provider || 'Gmail (EmailJS)'}.`
+        );
+      } else if (emailResult?.recipient) {
+        showFeedback(
+          `Order ${orderId} marked Ready (Email notice for ${emailResult.recipient}: ${emailResult.error || 'Pending'}).`
+        );
+      } else {
+        showFeedback(
+          `Order ${orderId} status updated to Ready (no customer email on file to notify).`
+        );
+      }
+    } else {
+      showFeedback(
+        `Order ${orderId} status updated to ${newStatus} (synced with User Profile).`
+      );
+    }
   };
 
   const handleCycleStatus = async (orderId: string, currentOrderStatus?: OrderStatus) => {
@@ -635,7 +827,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       rawStatus === 'Pending'
         ? 'Baking'
         : rawStatus === 'Baking'
-        ? 'Delivered'
+        ? 'Ready'
         : 'Pending';
 
     await handleSetOrderStatus(orderId, nextStatus);
@@ -1008,16 +1200,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             )}
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-col items-center justify-center leading-none">
               <button
                 type="button"
                 onClick={() => navigateToTab('Dashboard')}
-                className="text-xl sm:text-2xl font-black text-[#4c1d95] tracking-tight font-headline cursor-pointer"
+                className="text-xl sm:text-2xl font-black text-[#4c1d95] tracking-tight font-headline cursor-pointer leading-none"
               >
                 CakeZone
               </button>
-              <span className="text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#4c1d95] text-white font-extrabold shadow-2xs">
-                ADMIN PANEL
+              <span className="text-[10px] sm:text-[11px] font-bold text-[#4c1d95] tracking-wide mt-0.5 leading-none">
+                (Admin)
               </span>
             </div>
 
@@ -1109,6 +1301,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <span className="material-symbols-outlined text-lg">grid_view</span>
               <span>Dashboard Overview</span>
+            </button>
+            <button
+              onClick={() => navigateToTab('Statistics')}
+              className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${
+                activeTab === 'Statistics'
+                  ? 'bg-[#7c3aed] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-lg">bar_chart</span>
+                <span>Statistic</span>
+              </div>
+              <span
+                className={`px-2 py-0.5 text-[11px] rounded-full font-extrabold ${
+                  activeTab === 'Statistics'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-[#ede9fe] text-[#5b21b6]'
+                }`}
+              >
+                {loggedInUsers.length}
+              </span>
             </button>
             <button
               onClick={() => navigateToTab('Customers')}
@@ -1298,8 +1512,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Overview / Menu Pill Button with Navigation Dropdown */}
-              <div className="relative flex items-center">
+              {/* Overview / Menu Pill Button with Navigation Dropdown + Statistic Button beside it */}
+              <div className="relative flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowDashboardMenu((prev) => !prev)}
@@ -1307,6 +1521,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <span className="material-symbols-outlined text-sm sm:text-base">grid_view</span>
                   <span>Menu</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateToTab('Statistics')}
+                  className="px-4 py-1.5 rounded-full bg-[#f3e8ff] hover:bg-[#e9d5ff] text-[#6d28d9] border border-[#d8b4fe] text-xs sm:text-sm font-bold flex items-center gap-2 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm sm:text-base">bar_chart</span>
+                  <span>Statistic</span>
                 </button>
 
                 {showDashboardMenu && (
@@ -1321,6 +1544,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>Overview</span>
                       </span>
                       <span className="material-symbols-outlined text-sm">check</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('Statistics')}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-base text-[#7c3aed]">
+                          bar_chart
+                        </span>
+                        <span>Statistic (Day-Wise Logins)</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f3e8ff] text-[#6d28d9] text-[10px] font-extrabold">
+                        {loggedInUsers.length}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -1599,7 +1837,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div className="space-y-1.5 sm:space-y-2.5 min-w-0">
                     <p className="text-[10px] sm:text-xs font-medium text-slate-400 truncate">
-                      Target: {Math.max(180, orders.length * 20).toLocaleString('en-IN')} boxes
+                      Ready: {timeframeOrders.filter((o) => o.status === 'Ready').length} /{' '}
+                      {totalOrdersCount} orders
                     </p>
                     <div className="w-full h-1.5 sm:h-2.5 rounded-full bg-slate-100 overflow-hidden">
                       <div
@@ -1611,8 +1850,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               : Math.min(
                                   100,
                                   Math.max(
-                                    25,
-                                    Math.round((totalOrdersCount / Math.max(1, orders.length)) * 85)
+                                    15,
+                                    Math.round(
+                                      (timeframeOrders.filter((o) => o.status === 'Ready').length /
+                                        Math.max(1, totalOrdersCount)) *
+                                        100
+                                    )
                                   )
                                 )
                           }%`,
@@ -1659,13 +1902,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-emerald-500 text-emerald-600 flex items-center justify-center text-[9px] sm:text-[11px] font-black shrink-0">
                       ✓
                     </span>
-                    <span className="truncate">99.4% On-Time</span>
+                    <span className="truncate">{catalogCakes.length} Catalog Items</span>
                   </div>
 
                   <div className="pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between gap-1 text-[10px] sm:text-xs min-w-0">
                     <span className="text-slate-400 font-medium truncate">Total reviews</span>
                     <span className="font-extrabold text-[#7c3aed] shrink-0">
-                      {customerSatisfaction.totalReviews} today
+                      {customerSatisfaction.totalReviews} reviews
                     </span>
                   </div>
                 </div>
@@ -1737,6 +1980,250 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
+
+          {/* =================================================================
+              1B. STATISTIC PAGE (Matches Reference Structure 1:1)
+          ================================================================== */}
+          {activeTab === 'Statistics' && (
+            <div className="max-w-3xl mx-auto w-full min-w-0 flex flex-col gap-4 sm:gap-6">
+              {/* Top Timeframe Header & Timeframe Filter Dropdown */}
+              <div className="flex items-center justify-between gap-2">
+                <h1 className="text-[28px] sm:text-4xl font-black text-slate-900 tracking-tight font-headline leading-none">
+                  {timeframeFilter}
+                </h1>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowTimeframeDropdown((prev) => !prev)}
+                    className="px-3.5 py-1.5 rounded-full bg-[#f3e8ff] hover:bg-[#e9d5ff] text-[#6d28d9] text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>{timeframeFilter}</span>
+                    <span className="material-symbols-outlined text-base leading-none">
+                      expand_more
+                    </span>
+                  </button>
+                  {showTimeframeDropdown && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-30">
+                      {(
+                        [
+                          { value: 'All Time', label: 'All Time (Up Till Now)' },
+                          { value: 'Today', label: 'Today' },
+                          { value: 'Yesterday', label: 'Yesterday' },
+                          { value: 'This Week', label: 'This Week' },
+                          { value: 'This Month', label: 'This Month' },
+                        ] as const
+                      ).map((tf) => (
+                        <button
+                          key={tf.value}
+                          type="button"
+                          onClick={() => {
+                            setTimeframeFilter(tf.value);
+                            setShowTimeframeDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-xs font-bold flex items-center justify-between cursor-pointer ${
+                            timeframeFilter === tf.value
+                              ? 'bg-[#f5f3ff] text-[#6d28d9]'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{tf.label}</span>
+                          {timeframeFilter === tf.value && (
+                            <span className="material-symbols-outlined text-sm">check</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Menu + Statistic Pill Row */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => navigateToTab('Dashboard')}
+                  className="px-4 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs sm:text-sm font-bold flex items-center gap-2 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm sm:text-base">
+                    arrow_back
+                  </span>
+                  <span>Menu</span>
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-full bg-[#7c3aed] text-white border-2 border-slate-900 text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs cursor-default"
+                >
+                  <span className="material-symbols-outlined text-sm sm:text-base">
+                    bar_chart
+                  </span>
+                  <span>Statistic</span>
+                </button>
+              </div>
+
+              {/* MAIN CHART CARD (Matches Uploaded Reference Structure 1:1) */}
+              <div className="bg-white rounded-[32px] p-5 sm:p-8 shadow-sm border border-slate-100 flex flex-col gap-5 sm:gap-6 w-full min-w-0">
+                {/* Top Header Row */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-xl sm:text-[26px] font-black text-[#0f172a] tracking-tight leading-tight">
+                      Weekly Visitor Traffic
+                    </h2>
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#047857] text-xs font-extrabold">
+                        <span>↗</span>
+                        <span>{dayWiseLoginStats.activeWeekPercent}% this week</span>
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#94a3b8] font-medium mt-2 leading-snug">
+                      Mon – Sun Real User Logins &amp;
+                      <br className="sm:hidden" /> Activity (Fetched from Supabase)
+                    </p>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div className="text-2xl sm:text-[32px] font-black text-[#0f172a] tabular-nums leading-none">
+                      {dayWiseLoginStats.totalActive.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-[#7c3aed] mt-1.5">
+                      TOTAL ACTIVE
+                    </div>
+                  </div>
+                </div>
+
+                {/* Inner Lavender Chart Box */}
+                <div className="bg-[#fcfaff] border border-[#f3e8ff] rounded-[24px] p-4 sm:p-6 flex flex-col justify-between gap-6">
+                  {/* Peak & Avg Pill Row */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0"></span>
+                      <span className="text-[#64748b] font-medium">Peak:</span>
+                      <span className="font-extrabold text-[#0f172a]">
+                        {dayWiseLoginStats.peakDayFull} (
+                        {dayWiseLoginStats.peakCount.toLocaleString('en-IN')})
+                      </span>
+                    </div>
+
+                    <div className="px-3.5 py-1 rounded-full bg-white border border-[#e9d5ff] text-[#7c3aed] text-xs font-extrabold shadow-2xs">
+                      Avg {dayWiseLoginStats.avgPerDay}/day
+                    </div>
+                  </div>
+
+                  {/* Real Day-Wise Bar Chart */}
+                  <div className="pt-4 pb-1 px-1 sm:px-3">
+                    <div className="grid grid-cols-7 items-end gap-2 sm:gap-4 h-44 sm:h-52">
+                      {dayWiseLoginStats.bars.map((bar) => {
+                        const maxVal = Math.max(1, dayWiseLoginStats.peakCount);
+                        const heightPct =
+                          bar.count === 0
+                            ? 12
+                            : Math.max(24, Math.round((bar.count / maxVal) * 100));
+                        const isPeak =
+                          bar.short === dayWiseLoginStats.peakDayShort && bar.count > 0;
+                        const isSelected = selectedStatDay === bar.short;
+                        const dateParts = (bar.dateLabel || '').split(' ');
+
+                        const barStyleClass = isPeak
+                          ? 'bg-gradient-to-b from-[#f43f5e] via-[#8b5cf6] to-[#581c87] ring-4 ring-[#f3e8ff] shadow-md'
+                          : bar.count > 0
+                          ? 'bg-gradient-to-b from-[#9d4edd] to-[#6d28d9]'
+                          : 'bg-[#d8b4fe]';
+
+                        return (
+                          <button
+                            key={bar.short}
+                            type="button"
+                            onClick={() =>
+                              setSelectedStatDay((prev) =>
+                                prev === bar.short ? 'All' : bar.short
+                              )
+                            }
+                            className="flex flex-col items-center justify-end h-full group cursor-pointer focus:outline-none"
+                            title={`${bar.full} (${bar.dateLabel}): ${bar.count} user login(s), ${bar.orderCount} order(s)`}
+                          >
+                            {/* Real Count Label Above Bar */}
+                            <div
+                              className={`text-[11px] sm:text-xs mb-2 tabular-nums flex items-center gap-0.5 ${
+                                isPeak
+                                  ? 'font-black text-[#4c1d95]'
+                                  : bar.count > 0
+                                  ? 'font-extrabold text-[#475569]'
+                                  : 'font-bold text-[#94a3b8]'
+                              }`}
+                            >
+                              {isPeak && (
+                                <span className="text-amber-500 text-[11px] leading-none">★</span>
+                              )}
+                              <span>{bar.count}</span>
+                            </div>
+
+                            {/* Vertical Rounded Bar */}
+                            <div className="w-full max-w-[44px] flex items-end justify-center flex-1">
+                              <div
+                                className={`w-full rounded-t-[18px] rounded-b-[4px] transition-all duration-300 ${barStyleClass} ${
+                                  isSelected
+                                    ? 'ring-2 ring-[#4c1d95] scale-[1.03]'
+                                    : 'group-hover:opacity-90'
+                                }`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            </div>
+
+                            {/* Day Label + Stacked Date Below Bar */}
+                            <span
+                              className={`mt-2 text-xs sm:text-sm leading-none ${
+                                isPeak || isSelected
+                                  ? 'font-black text-[#4c1d95]'
+                                  : 'font-bold text-[#64748b]'
+                              }`}
+                            >
+                              {bar.short}
+                            </span>
+                            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 mt-1 leading-tight text-center">
+                              {dateParts[0] || ''}
+                              <br />
+                              {dateParts[1] || ''}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Footer Stats Row inside Card (Real Supabase Values) */}
+                <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 sm:gap-6">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#f3e8ff] text-[#7c3aed] font-black text-xs sm:text-sm flex items-center justify-center shrink-0">
+                      {dayWiseLoginStats.customerPercent}%
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] sm:text-xs font-medium text-[#94a3b8] truncate">
+                        Customer Logins
+                      </p>
+                      <p className="text-xs sm:text-base font-extrabold text-[#1e293b] truncate">
+                        {dayWiseLoginStats.customerCount} Customers · {dayWiseLoginStats.adminCount}{' '}
+                        Admins
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#fef3c7] text-[#b45309] font-black text-xs sm:text-sm flex items-center justify-center shrink-0">
+                      {orders.length}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] sm:text-xs font-medium text-[#94a3b8] truncate">
+                        Total Orders &amp; Profiles
+                      </p>
+                      <p className="text-xs sm:text-base font-extrabold text-[#1e293b] truncate">
+                        {orders.length} Orders · {savedProfiles.length} Profiles
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* =================================================================
               2. LOGGED-IN USERS PAGE (Matches Image 2: Total People Logged In)
@@ -2824,7 +3311,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <option value="All Statuses">All Statuses</option>
                       <option value="Pending">Pending</option>
                       <option value="Baking">Baking</option>
-                      <option value="Delivered">Delivered</option>
+                      <option value="Ready">Ready</option>
                     </select>
                   </div>
                 </div>
@@ -2893,12 +3380,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => handleCycleStatus(ord.id, ord.status)}
-                              title="Click to cycle order status (Pending → Baking → Delivered)"
+                              title="Click to cycle order status (Pending → Baking → Ready)"
                               className="focus:outline-none cursor-pointer"
                             >
                               <span
                                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold transition-colors select-none ${
-                                  ord.status === 'Delivered'
+                                  ord.status === 'Ready'
                                     ? 'bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25'
                                     : ord.status === 'Baking'
                                     ? 'bg-primary-container/20 text-primary hover:bg-primary-container/30'

@@ -382,6 +382,17 @@ export const fetchUserProfile = async () => {
   return { data: data as ProfileRecord | null, error };
 };
 
+export const sanitizeTextInput = (input: unknown, maxLength = 500): string => {
+  if (typeof input !== 'string') return '';
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, maxLength);
+};
+
 export const upsertUserProfile = async (profile: ProfileRecord) => {
   const { data: { session } } = await supabase.auth.getSession();
   const userId = session?.user?.id ?? null;
@@ -390,11 +401,18 @@ export const upsertUserProfile = async (profile: ProfileRecord) => {
   const isAdmin = await resolveIsAdminFromSupabase(session?.user);
   const savedAtIso = new Date().toISOString();
 
+  const safeFullName = sanitizeTextInput(profile.full_name, 120);
+  const safeEmail = sanitizeTextInput(profile.email, 160);
+  const safePhone = sanitizeTextInput(profile.phone, 32);
+  const safeCityCode = sanitizeTextInput(profile.city_code, 64);
+  const safeAddress = sanitizeTextInput(profile.address, 400);
+  const safeDietaryNotes = sanitizeTextInput(profile.dietary_notes, 500);
+
   // Store only file metadata + storage path in the database (never transient signed URLs)
   const dbFiles = (profile.uploaded_files || []).map((f) => ({
-    name: f.name,
+    name: sanitizeTextInput(f.name, 180),
     size: f.size,
-    type: f.type,
+    type: sanitizeTextInput(f.type, 80),
     path: f.storagePath || f.path || '',
     storagePath: f.storagePath || f.path || '',
   }));
@@ -404,12 +422,12 @@ export const upsertUserProfile = async (profile: ProfileRecord) => {
     .upsert(
       {
         user_id: userId,
-        full_name: profile.full_name,
-        email: profile.email,
-        phone: profile.phone,
-        city_code: profile.city_code,
-        address: profile.address,
-        dietary_notes: profile.dietary_notes,
+        full_name: safeFullName,
+        email: safeEmail,
+        phone: safePhone,
+        city_code: safeCityCode,
+        address: safeAddress,
+        dietary_notes: safeDietaryNotes,
         uploaded_files: dbFiles,
         role: isAdmin ? 'Admin' : 'Customer',
         updated_at: savedAtIso,
@@ -1387,6 +1405,13 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
       customCakesByUser
     );
 
+    const normalizeStatus = (raw?: string): OrderStatus => {
+      const s = String(raw || '').trim().toLowerCase();
+      if (s === 'ready' || s === 'delivered') return 'Ready';
+      if (s === 'baking') return 'Baking';
+      return 'Pending';
+    };
+
     const resolvedOrderId = row.order_code || row.id;
     const override = mergedOverrides[resolvedOrderId] || mergedOverrides[row.id];
 
@@ -1401,7 +1426,7 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
       date: formattedDate,
       timeOfIssue: formattedTime,
       createdAt: row.created_at,
-      status: override?.status || (row.status as OrderStatus) || 'Pending',
+      status: normalizeStatus(override?.status || row.status),
       amount:
         typeof override?.amount === 'number'
           ? override.amount
@@ -1409,6 +1434,13 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
       specialInstructions: row.special_instructions || '',
     };
   });
+
+  const normalizeOrderStatusValue = (raw?: string): OrderStatus => {
+    const s = String(raw || '').trim().toLowerCase();
+    if (s === 'ready' || s === 'delivered') return 'Ready';
+    if (s === 'baking') return 'Baking';
+    return 'Pending';
+  };
 
   const deletedOrderIds = new Set(readSharedStore<string[]>(SHARED_STORE_KEYS.deletedOrders, []));
   const sharedOrders = readSharedStore<Order[]>(SHARED_STORE_KEYS.orders, []);
@@ -1421,7 +1453,7 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
         const override = mergedOverrides[ord.id];
         byId.set(ord.id, {
           ...ord,
-          status: override?.status || ord.status,
+          status: normalizeOrderStatusValue(override?.status || ord.status),
           amount: typeof override?.amount === 'number' ? override.amount : Number(ord.amount || 0),
         });
       }
@@ -1440,7 +1472,9 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
             : Number(ord.amount || 0);
         byId.set(ord.id, {
           ...ord,
-          status: override?.status || existingShared?.status || ord.status,
+          status: normalizeOrderStatusValue(
+            override?.status || existingShared?.status || ord.status
+          ),
           amount: resolvedAmount,
         });
       }
@@ -1468,7 +1502,7 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
       const override = mergedOverrides[ord.id];
       byCustomerOrderId.set(ord.id, {
         ...ord,
-        status: override?.status || ord.status,
+        status: normalizeOrderStatusValue(override?.status || ord.status),
         amount: typeof override?.amount === 'number' ? override.amount : Number(ord.amount || 0),
       });
     }
@@ -1476,6 +1510,13 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
 
   mapped.forEach((ord) => {
     if (!ord?.id || deletedOrderIds.has(ord.id)) return;
+    const matchesUser =
+      (ord.userId && ord.userId === userId) ||
+      (userEmailLower &&
+        ord.customerEmail &&
+        ord.customerEmail.trim().toLowerCase() === userEmailLower);
+    if (!matchesUser) return;
+
     const existingShared =
       byCustomerOrderId.get(ord.id) || sharedOrders.find((so) => so.id === ord.id);
     const override = mergedOverrides[ord.id];
@@ -1490,7 +1531,7 @@ export const fetchOrders = async (): Promise<{ data: Order[]; error: any }> => {
 
     byCustomerOrderId.set(ord.id, {
       ...ord,
-      status: override?.status || existingShared?.status || ord.status,
+      status: normalizeOrderStatusValue(override?.status || existingShared?.status || ord.status),
       amount: resolvedAmount,
     });
   });
@@ -1523,20 +1564,23 @@ export const createOrderInDb = async (params: {
   const orderCode = params.orderCode || `#CZ-${Math.floor(1000 + Math.random() * 9000)}`;
   const cakeSummary = params.items
     .map((i) => {
-      const fullName = ensureFullCakeTitle(i.name);
-      return i.details ? `${i.quantity}x ${fullName} (${i.details})` : `${i.quantity}x ${fullName}`;
+      const fullName = sanitizeTextInput(ensureFullCakeTitle(i.name), 160);
+      const safeDetails = i.details ? sanitizeTextInput(i.details, 300) : '';
+      return safeDetails ? `${i.quantity}x ${fullName} (${safeDetails})` : `${i.quantity}x ${fullName}`;
     })
     .join(' | ');
-  const emailToStore = params.customerEmail || session?.user?.email || '';
-  const phoneToStore = params.customerPhone || '';
+  const safeCustomerName = sanitizeTextInput(params.customer, 120) || 'Customer';
+  const emailToStore = sanitizeTextInput(params.customerEmail || session?.user?.email || '', 160);
+  const phoneToStore = sanitizeTextInput(params.customerPhone || '', 32);
+  const safeSpecialInstructions = sanitizeTextInput(params.specialInstructions || '', 500);
   const createdAtIso = new Date().toISOString();
 
   const metaParts: string[] = [];
-  if (params.specialInstructions) metaParts.push(params.specialInstructions);
-  if (phoneToStore && !String(params.specialInstructions || '').includes('Contact:')) {
+  if (safeSpecialInstructions) metaParts.push(safeSpecialInstructions);
+  if (phoneToStore && !safeSpecialInstructions.includes('Contact:')) {
     metaParts.push(`Contact: ${phoneToStore}`);
   }
-  if (emailToStore && !String(params.specialInstructions || '').includes('Email:')) {
+  if (emailToStore && !safeSpecialInstructions.includes('Email:')) {
     metaParts.push(`Email: ${emailToStore}`);
   }
   const combinedInstructions = metaParts.join(' | ');
@@ -1554,7 +1598,7 @@ export const createOrderInDb = async (params: {
     .insert({
       user_id: userId,
       order_code: orderCode,
-      customer: params.customer,
+      customer: safeCustomerName,
       customer_email: emailToStore,
       customer_phone: phoneToStore,
       cake_item: cakeSummary || 'Artisanal Cake Order',
@@ -1572,7 +1616,7 @@ export const createOrderInDb = async (params: {
       .insert({
         user_id: userId,
         order_code: orderCode,
-        customer: params.customer,
+        customer: safeCustomerName,
         cake_item: cakeSummary || 'Artisanal Cake Order',
         items: params.items,
         special_instructions: combinedInstructions,
@@ -1590,7 +1634,7 @@ export const createOrderInDb = async (params: {
   const newOrderForAdmin: Order = {
     id: orderCode,
     userId,
-    customer: params.customer || 'Customer',
+    customer: safeCustomerName,
     customerEmail: emailToStore || '—',
     customerPhone: phoneToStore || '—',
     cakeItem: cakeSummary || 'Artisanal Cake Order',
@@ -1666,10 +1710,171 @@ const syncOrderOverridesToSupabaseSettings = async (
   }
 };
 
-export const updateOrderStatusInDb = async (orderIdOrCode: string, status: OrderStatus) => {
+export const sendOrderReadyEmailNotification = async (order: {
+  id: string;
+  customer: string;
+  customerEmail?: string;
+  cakeItem: string;
+  cakeTypeDetail?: string;
+  amount: number;
+  date?: string;
+}): Promise<{ sent: boolean; provider?: string; recipient?: string; error?: string }> => {
+  const recipient = (order.customerEmail || '').trim();
+  if (!recipient || !recipient.includes('@') || recipient === '—') {
+    return { sent: false, error: 'No valid customer email found for this order' };
+  }
+
+  const readyTimeFormatted = new Date().toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  const formattedAmount =
+    order.amount > 0
+      ? `₹${Number(order.amount).toLocaleString('en-IN')}`
+      : 'Bespoke Quote';
+
+  const emailSubject = `🎂 Your CakeZone Order ${order.id} is Ready!`;
+  const emailMessage = `Your freshly baked order has been crafted with care by our pastry chefs and is now ready at CakeZone Patisserie. Thank you for celebrating your special moments with us!`;
+
+  // 1. Automatic EmailJS REST API dispatch (works directly from browser & Vercel)
+  const rawServiceId = (
+    import.meta.env.VITE_EMAILJS_SERVICE_ID || 'default_service'
+  ).trim();
+  const rawTemplateId = (
+    import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_50iyj49'
+  ).trim();
+  const emailJsPublicKey = (
+    import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'BGQzEiGCJqRY1sYIS'
+  ).trim();
+
+  if (emailJsPublicKey) {
+    const templateParams = {
+      to_email: recipient,
+      email: recipient,
+      user_email: recipient,
+      customer_email: recipient,
+      recipient_email: recipient,
+      recipient: recipient,
+      to: recipient,
+      reply_to: recipient,
+      to_name: order.customer || 'Customer',
+      name: order.customer || 'Customer',
+      user_name: order.customer || 'Customer',
+      customer_name: order.customer || 'Customer',
+      from_name: 'CakeZone Patisserie',
+      order_id: order.id,
+      cake_item: order.cakeItem,
+      cake_details: order.cakeTypeDetail || 'Signature Patisserie Selection',
+      order_amount: formattedAmount,
+      cost: {
+        shipping: '₹0',
+        tax: 'Included',
+        total: formattedAmount,
+      },
+      orders: [
+        {
+          name: order.cakeItem,
+          units: 1,
+          price: formattedAmount,
+        },
+      ],
+      ready_time: readyTimeFormatted,
+      order_status: 'Ready',
+      subject: emailSubject,
+      message: emailMessage,
+    };
+
+    const candidateServiceIds = Array.from(
+      new Set(['default_service', rawServiceId, 'service_6iqk1xs'].filter(Boolean))
+    );
+    const candidateTemplateIds = Array.from(
+      new Set([
+        'template_50iyj49',
+        ...(rawTemplateId.startsWith('template_')
+          ? [rawTemplateId, rawTemplateId.replace(/^template_/, '')]
+          : [`template_${rawTemplateId}`, rawTemplateId]),
+      ])
+    );
+
+    let lastEmailJsError = '';
+    for (const serviceId of candidateServiceIds) {
+      for (const candidateId of candidateTemplateIds) {
+        try {
+          const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              service_id: serviceId,
+              template_id: candidateId,
+              user_id: emailJsPublicKey,
+              template_params: templateParams,
+            }),
+          });
+
+          if (response.ok) {
+            return { sent: true, provider: 'Gmail (EmailJS)', recipient };
+          } else {
+            const errText = await response.text().catch(() => `HTTP ${response.status}`);
+            if (
+              !errText.toLowerCase().includes('service id not found') &&
+              !errText.toLowerCase().includes('template id not found')
+            ) {
+              lastEmailJsError = errText;
+            } else if (!lastEmailJsError) {
+              lastEmailJsError = errText;
+            }
+          }
+        } catch (err: any) {
+          lastEmailJsError = err?.message || 'Network error calling EmailJS';
+        }
+      }
+    }
+
+    // If EmailJS returned a specific configuration error, return it if Edge Function is not used
+    try {
+      const { error: fnError } = await supabase.functions.invoke('send-order-ready-email', {
+        body: {
+          to: recipient,
+          customerName: order.customer || 'Customer',
+          orderId: order.id,
+          cakeItem: order.cakeItem,
+          cakeTypeDetail: order.cakeTypeDetail || '',
+          amount: order.amount,
+          status: 'Ready',
+          subject: emailSubject,
+          message: emailMessage,
+        },
+      });
+      if (!fnError) {
+        return { sent: true, provider: 'Supabase Edge Function', recipient };
+      }
+    } catch {
+      // Ignore Edge Function fallback error
+    }
+
+    return {
+      sent: false,
+      recipient,
+      error: lastEmailJsError || 'EmailJS could not send email',
+    };
+  }
+
+  return { sent: false, recipient, error: 'Email provider credentials not configured yet' };
+};
+
+export const updateOrderStatusInDb = async (
+  orderIdOrCode: string,
+  status: OrderStatus,
+  orderContext?: Partial<Order>
+) => {
   const { data: { session } } = await supabase.auth.getSession();
   const userId = session?.user?.id || null;
-  if (!userId) return { data: null, error: new Error('Not authenticated') };
+  if (!userId) return { data: null, error: new Error('Not authenticated'), emailResult: null };
 
   const isAdmin = await resolveIsAdminFromSupabase(session?.user);
   const column = orderIdOrCode.startsWith('#CZ-') ? 'order_code' : 'id';
@@ -1688,6 +1893,7 @@ export const updateOrderStatusInDb = async (orderIdOrCode: string, status: Order
 
   // 2. Sync status in sharedOrders store immediately
   const sharedOrders = readSharedStore<Order[]>(SHARED_STORE_KEYS.orders, []);
+  const matchedOrder: Order | undefined = sharedOrders.find((o) => o.id === orderIdOrCode);
   if (sharedOrders.length > 0) {
     writeSharedStore(
       SHARED_STORE_KEYS.orders,
@@ -1717,7 +1923,122 @@ export const updateOrderStatusInDb = async (orderIdOrCode: string, status: Order
   }
 
   const { data, error } = await query.select().maybeSingle();
-  return { data, error };
+
+  // 5. Automatically trigger Order Ready email when status transitions to 'Ready'
+  let emailResult: {
+    sent: boolean;
+    provider?: string;
+    recipient?: string;
+    error?: string;
+  } | null = null;
+
+  if (status === 'Ready') {
+    const pickValidEmail = (...candidates: Array<string | undefined | null>): string => {
+      for (const c of candidates) {
+        const trimmed = (c || '').trim();
+        if (trimmed && trimmed !== '—' && trimmed.includes('@')) {
+          return trimmed;
+        }
+      }
+      return '';
+    };
+
+    const instructionsText =
+      orderContext?.specialInstructions ||
+      matchedOrder?.specialInstructions ||
+      data?.special_instructions ||
+      '';
+    const emailFromInstructionsMatch = instructionsText.match(
+      /Email:\s*([^\s|]+@[^\s|]+)/i
+    );
+
+    let resolvedCustomerEmail = pickValidEmail(
+      orderContext?.customerEmail,
+      matchedOrder?.customerEmail,
+      data?.customer_email,
+      data?.email,
+      emailFromInstructionsMatch?.[1]
+    );
+
+    // Fallback: look up customer email from profiles or shared users if not directly on the order row
+    const orderOwnerId = orderContext?.userId || matchedOrder?.userId || data?.user_id;
+    const customerNameLower = (
+      orderContext?.customer ||
+      matchedOrder?.customer ||
+      data?.customer ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!resolvedCustomerEmail && orderOwnerId) {
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('user_id', orderOwnerId)
+          .maybeSingle();
+        resolvedCustomerEmail = pickValidEmail(prof?.email);
+      } catch {
+        // Ignore profile lookup error
+      }
+    }
+
+    if (!resolvedCustomerEmail) {
+      const savedProfiles = readSharedStore<SavedUserProfileRecord[]>(
+        SHARED_STORE_KEYS.savedProfiles,
+        []
+      );
+      const matchedProfile = savedProfiles.find(
+        (sp) =>
+          (orderOwnerId && (sp.userId === orderOwnerId || sp.id === orderOwnerId)) ||
+          (customerNameLower && sp.fullName.trim().toLowerCase() === customerNameLower)
+      );
+      resolvedCustomerEmail = pickValidEmail(matchedProfile?.email);
+    }
+
+    if (!resolvedCustomerEmail) {
+      const knownUsers = readSharedStore<LoggedInUserRecord[]>(SHARED_STORE_KEYS.users, []);
+      const matchedUser = knownUsers.find(
+        (u) =>
+          (orderOwnerId && u.id === orderOwnerId) ||
+          (customerNameLower && u.name.trim().toLowerCase() === customerNameLower)
+      );
+      resolvedCustomerEmail = pickValidEmail(matchedUser?.email);
+    }
+
+    if (!resolvedCustomerEmail && session?.user?.email) {
+      resolvedCustomerEmail = pickValidEmail(session.user.email);
+    }
+
+    const orderForEmail = {
+      id: orderIdOrCode,
+      customer:
+        orderContext?.customer ||
+        matchedOrder?.customer ||
+        data?.customer_name ||
+        data?.customer ||
+        'Customer',
+      customerEmail: resolvedCustomerEmail,
+      cakeItem:
+        orderContext?.cakeItem ||
+        matchedOrder?.cakeItem ||
+        data?.cake_item ||
+        'Cake Order',
+      cakeTypeDetail:
+        orderContext?.cakeTypeDetail ||
+        matchedOrder?.cakeTypeDetail ||
+        data?.cake_type_detail ||
+        '',
+      amount: Number(
+        orderContext?.amount ?? matchedOrder?.amount ?? data?.amount ?? 0
+      ),
+      date: orderContext?.date || matchedOrder?.date || data?.order_date || '',
+    };
+    emailResult = await sendOrderReadyEmailNotification(orderForEmail);
+  }
+
+  return { data, error, emailResult };
 };
 
 export const updateOrderAmountInDb = async (orderIdOrCode: string, amount: number) => {
@@ -2193,7 +2514,11 @@ export const recordUserLoginInSupabase = async (sessionUser?: any) => {
     'Member';
   const metaPhone = user.user_metadata?.phone || '';
   const isAdmin = isUserAdminSync(user);
-  const nowIso = new Date().toISOString();
+  const realSignInIso =
+    user.last_sign_in_at ||
+    user.updated_at ||
+    user.created_at ||
+    new Date().toISOString();
 
   // Record in shared admin users list immediately so all admins see every logged-in user
   const sharedUsers = readSharedStore<LoggedInUserRecord[]>(SHARED_STORE_KEYS.users, []);
@@ -2204,22 +2529,33 @@ export const recordUserLoginInSupabase = async (sessionUser?: any) => {
   );
   const syncedUserRecord: LoggedInUserRecord = {
     id: user.id,
-    name: existingShared?.name && existingShared.name !== 'Member' ? existingShared.name : metaName,
+    name:
+      existingShared?.name && existingShared.name !== 'Member'
+        ? existingShared.name
+        : metaName,
     email: email || existingShared?.email || '—',
-    phone: existingShared?.phone && existingShared.phone !== '—' ? existingShared.phone : metaPhone || '—',
+    phone:
+      existingShared?.phone && existingShared.phone !== '—'
+        ? existingShared.phone
+        : metaPhone || '—',
     role: isAdmin || existingShared?.role === 'Admin' ? 'Admin' : 'Customer',
-    city: existingShared?.city || '—',
-    lastLoginAt: nowIso,
+    city:
+      user.user_metadata?.city_code ||
+      user.user_metadata?.address ||
+      existingShared?.city ||
+      '—',
+    lastLoginAt: realSignInIso,
     avatarUrl: existingShared?.avatarUrl || '',
   };
-  writeSharedStore(SHARED_STORE_KEYS.users, [
+  const nextSharedUsers = [
     syncedUserRecord,
     ...sharedUsers.filter(
       (u) =>
         u.id !== user.id &&
         (!email || u.email.trim().toLowerCase() !== email.toLowerCase())
     ),
-  ]);
+  ];
+  writeSharedStore(SHARED_STORE_KEYS.users, nextSharedUsers);
 
   const { data: existingProfile } = await supabase
     .from('profiles')
@@ -2262,10 +2598,14 @@ export const fetchAllLoggedInUsersFromSupabase = async (): Promise<{
     await recordUserLoginInSupabase(session.user);
   }
 
-  const { data: profiles, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false });
+  const [profilesRes, ordersRes] = await Promise.all([
+    supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+    supabase.from('orders').select('*').order('created_at', { ascending: false }),
+  ]);
+
+  const profiles = profilesRes.data;
+  const error = profilesRes.error;
+  const ordersRows = Array.isArray(ordersRes.data) ? ordersRes.data : [];
 
   const dbMapped: LoggedInUserRecord[] =
     !error && Array.isArray(profiles)
@@ -2288,6 +2628,13 @@ export const fetchAllLoggedInUsersFromSupabase = async (): Promise<{
               avatarUrl = signed || '';
             }
 
+            const isCurrentSessionUser =
+              session?.user &&
+              (row.user_id === session.user.id ||
+                (email &&
+                  session.user.email &&
+                  email.toLowerCase() === session.user.email.trim().toLowerCase()));
+
             return {
               id: row.user_id || row.id,
               name: row.full_name || (email ? email.split('@')[0] : 'CakeZone User'),
@@ -2297,6 +2644,7 @@ export const fetchAllLoggedInUsersFromSupabase = async (): Promise<{
               city: row.city_code || row.city || row.address || '—',
               lastLoginAt:
                 row.last_login_at ||
+                (isCurrentSessionUser ? session?.user?.last_sign_in_at : undefined) ||
                 row.updated_at ||
                 row.created_at ||
                 new Date().toISOString(),
@@ -2306,7 +2654,7 @@ export const fetchAllLoggedInUsersFromSupabase = async (): Promise<{
         )
       : [];
 
-  // Merge DB profiles with shared admin users cache so all admins see the exact same logged-in people
+  // Merge DB profiles, real orders customer sessions, and shared admin users cache
   const sharedUsers = readSharedStore<LoggedInUserRecord[]>(SHARED_STORE_KEYS.users, []);
   const byKey = new Map<string, LoggedInUserRecord>();
 
@@ -2330,6 +2678,7 @@ export const fetchAllLoggedInUsersFromSupabase = async (): Promise<{
         phone: u.phone && u.phone !== '—' ? u.phone : existing?.phone || '—',
         city: u.city && u.city !== '—' ? u.city : existing?.city || '—',
         avatarUrl: u.avatarUrl || existing?.avatarUrl || '',
+        lastLoginAt: u.lastLoginAt || existing?.lastLoginAt || new Date().toISOString(),
         role:
           isAdminEmail(u.email) || u.role === 'Admin' || existing?.role === 'Admin'
             ? 'Admin'
@@ -2338,28 +2687,66 @@ export const fetchAllLoggedInUsersFromSupabase = async (): Promise<{
     }
   });
 
-  // Ensure configured admin accounts are represented with their current active role
-  const revokedSet = new Set(readSharedStore<string[]>(SHARED_STORE_KEYS.revokedAdmins, []));
-  ADMIN_EMAILS.forEach((adminEmail) => {
-    const clean = adminEmail.trim().toLowerCase();
-    if (!byKey.has(clean)) {
-      byKey.set(clean, {
-        id: `admin-${clean.split('@')[0]}`,
-        name: clean.split('@')[0].replace(/[._]/g, ' '),
-        email: clean,
-        phone: '—',
-        role: revokedSet.has(clean) && clean !== PRIMARY_OWNER_ADMIN_EMAIL ? 'Customer' : 'Admin',
+  // Also enrich from real Supabase `orders` rows so any user who placed an order is included with their real timestamp
+  ordersRows.forEach((ord: any) => {
+    const parsedContact = parseCustomerContactFromOrder(
+      ord.customer,
+      ord.special_instructions
+    );
+    const email = String(ord.customer_email || parsedContact.email || '').trim();
+    const uid = String(ord.user_id || '').trim();
+    const key = email ? email.toLowerCase() : uid;
+    if (!key) return;
+
+    const existing = byKey.get(key) || (uid ? byKey.get(uid) : undefined);
+    const orderCreatedIso = ord.created_at || undefined;
+
+    if (!existing) {
+      byKey.set(key, {
+        id: uid || `user-${key}`,
+        name:
+          parsedContact.name && parsedContact.name !== 'Guest'
+            ? parsedContact.name
+            : email
+            ? email.split('@')[0]
+            : 'Customer',
+        email: email || '—',
+        phone: ord.customer_phone || parsedContact.phone || '—',
+        role: isAdminEmail(email) ? 'Admin' : 'Customer',
         city: '—',
-        lastLoginAt: new Date().toISOString(),
+        lastLoginAt: orderCreatedIso || new Date().toISOString(),
         avatarUrl: '',
       });
-    } else if (revokedSet.has(clean) && clean !== PRIMARY_OWNER_ADMIN_EMAIL) {
-      const curr = byKey.get(clean)!;
-      byKey.set(clean, { ...curr, role: 'Customer' });
+    } else {
+      byKey.set(key, {
+        ...existing,
+        name:
+          existing.name && existing.name !== 'CakeZone User' && existing.name !== 'Member'
+            ? existing.name
+            : parsedContact.name || existing.name,
+        phone:
+          existing.phone && existing.phone !== '—'
+            ? existing.phone
+            : ord.customer_phone || parsedContact.phone || '—',
+        lastLoginAt: existing.lastLoginAt || orderCreatedIso || new Date().toISOString(),
+      });
     }
   });
 
-  const unified = Array.from(byKey.values());
+  // Ensure revoked admin status is respected
+  const revokedSet = new Set(readSharedStore<string[]>(SHARED_STORE_KEYS.revokedAdmins, []));
+  byKey.forEach((curr, key) => {
+    const clean = curr.email.trim().toLowerCase();
+    if (revokedSet.has(clean) && clean !== PRIMARY_OWNER_ADMIN_EMAIL) {
+      byKey.set(key, { ...curr, role: 'Customer' });
+    }
+  });
+
+  const unified = Array.from(byKey.values()).sort((a, b) => {
+    const tA = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
+    const tB = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
+    return tB - tA;
+  });
   writeSharedStore(SHARED_STORE_KEYS.users, unified);
   return { data: unified, error: null };
 };

@@ -91,7 +91,7 @@ create table if not exists public.orders (
   cake_item text not null,
   items jsonb not null default '[]'::jsonb,
   special_instructions text default '',
-  status text not null default 'Pending' check (status in ('Pending', 'Baking', 'Delivered')),
+  status text not null default 'Pending' check (status in ('Pending', 'Baking', 'Ready', 'Delivered')),
   amount numeric(10, 2) not null check (amount >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
