@@ -54,7 +54,8 @@ export default function App() {
       if (
         path === '/update-password' ||
         path === '/reset-password' ||
-        window.location.hash.includes('type=recovery')
+        window.location.hash.includes('type=recovery') ||
+        window.location.search.includes('type=recovery')
       ) {
         return 'update-password';
       }
@@ -112,14 +113,46 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Capture recovery tokens from URL hash immediately before any route cleanup
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const rawHash = window.location.hash.replace(/^#/, '');
+      const hashParams = new URLSearchParams(rawHash);
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const hashType = hashParams.get('type');
+      if (accessToken && refreshToken) {
+        sessionStorage.setItem(
+          'cakezone_recovery_tokens',
+          JSON.stringify({ access_token: accessToken, refresh_token: refreshToken })
+        );
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+      }
+      if (
+        hashType === 'recovery' ||
+        rawHash.includes('type=recovery') ||
+        rawHash.includes('error_code=otp_expired')
+      ) {
+        setCurrentScreen('update-password');
+      }
+    }
+
     // Check if URL indicates a password reset recovery flow
     if (
       window.location.pathname === '/update-password' ||
       window.location.pathname === '/reset-password' ||
-      window.location.hash.includes('type=recovery')
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery') ||
+      window.location.search.includes('token_hash=')
     ) {
       if (window.location.pathname !== '/update-password') {
-        window.history.replaceState(null, '', `/update-password${window.location.hash}`);
+        window.history.replaceState(
+          null,
+          '',
+          `/update-password${window.location.search}${window.location.hash}`
+        );
       }
       setCurrentScreen('update-password');
     }
@@ -192,7 +225,8 @@ export default function App() {
       if (
         path === '/update-password' ||
         path === '/reset-password' ||
-        window.location.hash.includes('type=recovery')
+        window.location.hash.includes('type=recovery') ||
+        window.location.search.includes('type=recovery')
       ) {
         setCurrentScreen('update-password');
         return;
@@ -250,8 +284,21 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        if (session?.access_token && session?.refresh_token) {
+          sessionStorage.setItem(
+            'cakezone_recovery_tokens',
+            JSON.stringify({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            })
+          );
+        }
         if (window.location.pathname !== '/update-password') {
-          window.history.replaceState(null, '', '/update-password');
+          window.history.replaceState(
+            null,
+            '',
+            `/update-password${window.location.search}${window.location.hash}`
+          );
         }
         setCurrentScreen('update-password');
         return;
@@ -320,7 +367,8 @@ export default function App() {
         if (
           event === 'SIGNED_IN' &&
           window.location.pathname !== '/update-password' &&
-          !window.location.hash.includes('type=recovery')
+          !window.location.hash.includes('type=recovery') &&
+          !window.location.search.includes('type=recovery')
         ) {
           setCurrentScreen((prev) => (prev === 'signin' ? 'storefront' : prev));
         }

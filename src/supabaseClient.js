@@ -25,6 +25,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    flowType: "implicit",
   },
 });
 

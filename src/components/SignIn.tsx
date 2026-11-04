@@ -97,6 +97,7 @@ export const SignIn: React.FC<SignInProps> = ({
 
     try {
       const trimmedEmail = email.trim();
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
@@ -136,7 +137,7 @@ export const SignIn: React.FC<SignInProps> = ({
           userEmail.split('@')[0];
         await registerKnownAccountEmail(userEmail, userName, data.user.id);
         const isAdmin = await resolveIsAdminFromSupabase(data.user);
-        const user = {
+        onLoginSuccess({
           name: userName,
           role: isAdmin ? 'Admin' : 'Customer',
           initials: (
@@ -145,8 +146,7 @@ export const SignIn: React.FC<SignInProps> = ({
             'CZ'
           ).toUpperCase(),
           email: userEmail,
-        };
-        onLoginSuccess(user);
+        });
         return;
       }
 
@@ -162,28 +162,24 @@ export const SignIn: React.FC<SignInProps> = ({
   const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
-    const email = resetEmail.trim();
-    if (!email) {
+    const targetEmail = resetEmail.trim();
+    if (!targetEmail) {
       setResetError('Please enter your email address.');
       return;
     }
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://cakezone-e7kn0thcg-ahteshaam-faruquis-projects.vercel.app/update-password',
+      const redirectUrl = `${window.location.origin}/update-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: redirectUrl,
       });
+
       if (error) {
-        if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('60 seconds')) {
-          setResetError(
-            'Please wait at least 60 seconds before requesting another password recovery email.'
-          );
-        } else {
-          setResetError(error.message);
-        }
+        setResetError(error.message);
       } else {
         setResetSent(true);
         setBannerMessage(
-          `A secure password recovery email has been sent to ${email} via Brevo. Please check your inbox (and Spam/Promotions folder) and click the reset link.`
+          `Password recovery link sent to ${targetEmail}. Please check your Gmail inbox.`
         );
       }
     } catch (err: any) {
@@ -421,46 +417,107 @@ export const SignIn: React.FC<SignInProps> = ({
           aria-modal="true"
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="bg-surface-container-lowest max-w-xs w-full p-5 rounded-2xl shadow-2xl border border-outline-variant space-y-4 text-center">
+          <div className="bg-surface-container-lowest max-w-sm w-full p-6 rounded-2xl shadow-2xl border border-outline-variant space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-base font-bold text-on-surface">
-                Forgot Password
-              </h3>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-xl">lock_reset</span>
+                <h3 className="text-base font-bold font-headline text-on-surface">
+                  Reset Your Password
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="text-on-surface-variant hover:text-on-surface cursor-pointer"
+                className="text-on-surface-variant hover:text-on-surface cursor-pointer p-1 rounded-lg"
               >
                 <span className="material-symbols-outlined text-xl">close</span>
               </button>
             </div>
-            <div className="py-2 space-y-3">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto">
-                <span className="material-symbols-outlined text-xl">info</span>
+
+            {resetSent ? (
+              <div className="space-y-4 text-center py-2">
+                <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                  <span className="material-symbols-outlined text-2xl">mark_email_read</span>
+                </div>
+                <p className="text-sm font-semibold text-on-surface">Check Your Email</p>
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  We've sent a password reset link to{' '}
+                  <span className="font-semibold text-on-surface">{resetEmail}</span>. Click the
+                  link in your inbox to open <span className="font-semibold">/update-password</span>{' '}
+                  and set your new password.
+                </p>
+                <div className="flex gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetSent(false);
+                      setResetError('');
+                    }}
+                    className="flex-1 py-2.5 bg-surface border border-outline-variant text-on-surface text-xs font-semibold rounded-xl cursor-pointer hover:bg-surface-container-low transition-all"
+                  >
+                    Resend Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="flex-1 py-2.5 bg-primary text-on-primary text-xs font-bold rounded-xl cursor-pointer hover:bg-primary/90 transition-all"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
               </div>
-              <p className="text-sm font-medium text-on-surface leading-relaxed">
-                It is out of service, create a new account
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(false)}
-                className="flex-1 py-2 bg-surface border border-outline-variant text-on-surface text-xs font-semibold rounded-xl cursor-pointer hover:bg-surface-container-low transition-all"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForgotModal(false);
-                  onNavigate('signup');
-                }}
-                className="flex-1 py-2 bg-primary text-on-primary text-xs font-bold rounded-xl cursor-pointer hover:bg-primary/90 transition-all"
-              >
-                Sign Up
-              </button>
-            </div>
+            ) : (
+              <form onSubmit={handleSendResetEmail} className="space-y-4">
+                <p className="text-xs text-on-surface-variant leading-relaxed">
+                  Enter the email address associated with your CakeZone account and we'll send you a
+                  link to reset your password.
+                </p>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-outline pointer-events-none">
+                      <span className="material-symbols-outlined text-lg">mail</span>
+                    </span>
+                    <input
+                      type="email"
+                      required
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="name@gmail.com"
+                      className="w-full pl-11 pr-4 py-2.5 bg-surface border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
+                    />
+                  </div>
+                </div>
+
+                {resetError && (
+                  <div className="p-2.5 bg-error/10 border border-error/20 rounded-xl">
+                    <p className="text-xs text-error font-medium text-center leading-relaxed">
+                      {resetError}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="flex-1 py-2.5 bg-surface border border-outline-variant text-on-surface text-xs font-semibold rounded-xl cursor-pointer hover:bg-surface-container-low transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="flex-1 py-2.5 bg-primary text-on-primary text-xs font-bold rounded-xl cursor-pointer hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {resetLoading ? 'Sending...' : 'Send Reset Link'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -299,3 +299,27 @@ create policy "Users can manage own cart items"
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- ============================================================================
+-- 6. PASSWORD RECOVERY RPC FUNCTION (Updates auth.users encrypted_password)
+-- ============================================================================
+create or replace function public.reset_user_password_by_email(
+  target_email text,
+  new_password text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+begin
+  update auth.users
+  set encrypted_password = extensions.crypt(new_password, extensions.gen_salt('bf')),
+      updated_at = now()
+  where lower(email) = lower(trim(target_email));
+  return found;
+end;
+$$;
+
+grant execute on function public.reset_user_password_by_email(text, text) to anon, authenticated;
+
