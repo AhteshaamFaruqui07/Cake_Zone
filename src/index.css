@@ -456,14 +456,16 @@
   display: flex;
   width: max-content;
   animation: cakezone-marquee-left 42s linear infinite;
-  will-change: transform;
+  contain: layout paint;
+  transform: translate3d(0, 0, 0);
 }
 
 .cakezone-marquee-track-right {
   display: flex;
   width: max-content;
   animation: cakezone-marquee-right 46s linear infinite;
-  will-change: transform;
+  contain: layout paint;
+  transform: translate3d(0, 0, 0);
 }
 
 .cakezone-marquee-row:hover .cakezone-marquee-track-left,
@@ -477,6 +479,47 @@
   .cakezone-marquee-track-left,
   .cakezone-marquee-track-right {
     animation: none !important;
+  }
+}
+
+/* ==========================================================================
+   2GB RAM Low-Spec Mobile Phone Performance Optimizations
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* Disable heavy continuous backdrop-filter blur on low-end mobile GPUs */
+  .category-glass-shine-btn {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: rgba(255, 255, 255, 0.96) !important;
+  }
+
+  /* Prevent inertial touch-scroll stutter */
+  html {
+    scroll-behavior: auto !important;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Smooth touch response with zero 300ms tap delay */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Soften memory-heavy box-shadows on budget phone GPUs */
+  .shadow-2xl,
+  .shadow-xl {
+    box-shadow: 0 4px 16px -2px rgba(15, 10, 28, 0.08) !important;
+  }
+
+  /* Lazy rendering off-screen items to conserve mobile VRAM/RAM */
+  .cakezone-marquee-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 160px;
   }
 }
 

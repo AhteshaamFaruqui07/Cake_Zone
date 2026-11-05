@@ -2060,21 +2060,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
 
-              {/* MAIN CHART CARD (Matches Uploaded Reference Structure 1:1) */}
-              <div className="bg-white rounded-[32px] p-5 sm:p-8 shadow-sm border border-slate-100 flex flex-col gap-5 sm:gap-6 w-full min-w-0">
+              {/* MAIN CHART CARD (Optimized for Mobile View & Low-RAM Phones) */}
+              <div className="bg-white rounded-[22px] sm:rounded-[32px] p-3.5 sm:p-7 md:p-8 shadow-xs border border-slate-100 flex flex-col gap-4 sm:gap-6 w-full min-w-0">
                 {/* Top Header Row */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-xl sm:text-[26px] font-black text-[#0f172a] tracking-tight leading-tight">
+                <div className="flex items-start justify-between gap-2.5 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg sm:text-[24px] md:text-[26px] font-black text-[#0f172a] tracking-tight leading-tight">
                       Weekly Visitor Traffic
                     </h2>
-                    <div className="mt-2">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#047857] text-xs font-extrabold">
+                    <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 sm:py-1 rounded-full bg-[#dcfce7] text-[#047857] text-[11px] sm:text-xs font-extrabold tracking-tight">
                         <span>↗</span>
                         <span>{dayWiseLoginStats.activeWeekPercent}% this week</span>
                       </span>
                     </div>
-                    <p className="text-xs sm:text-sm text-[#94a3b8] font-medium mt-2 leading-snug">
+                    <p className="text-[11px] sm:text-xs md:text-sm text-[#94a3b8] font-medium mt-1 leading-snug">
                       Mon – Sun Real User Logins &amp;
                       <br className="sm:hidden" /> Activity (Fetched from Supabase)
                     </p>
@@ -2084,18 +2084,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="text-2xl sm:text-[32px] font-black text-[#0f172a] tabular-nums leading-none">
                       {dayWiseLoginStats.totalActive.toLocaleString('en-IN')}
                     </div>
-                    <div className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-[#7c3aed] mt-1.5">
+                    <div className="text-[9px] sm:text-[10px] md:text-xs font-extrabold uppercase tracking-wider text-[#7c3aed] mt-1">
                       TOTAL ACTIVE
                     </div>
                   </div>
                 </div>
 
                 {/* Inner Lavender Chart Box */}
-                <div className="bg-[#fcfaff] border border-[#f3e8ff] rounded-[24px] p-4 sm:p-6 flex flex-col justify-between gap-6">
+                <div className="bg-[#fcfaff] border border-[#f3e8ff] rounded-[18px] sm:rounded-[24px] p-2.5 sm:p-5 md:p-6 flex flex-col justify-between gap-4 sm:gap-6 min-w-0">
                   {/* Peak & Avg Pill Row */}
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2 text-xs sm:text-sm">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0"></span>
+                    <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm">
+                      <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#7c3aed] shrink-0"></span>
                       <span className="text-[#64748b] font-medium">Peak:</span>
                       <span className="font-extrabold text-[#0f172a]">
                         {dayWiseLoginStats.peakDayFull} (
@@ -2103,27 +2103,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                     </div>
 
-                    <div className="px-3.5 py-1 rounded-full bg-white border border-[#e9d5ff] text-[#7c3aed] text-xs font-extrabold shadow-2xs">
+                    <div className="px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-full bg-white border border-[#e9d5ff] text-[#7c3aed] text-[10px] sm:text-xs font-extrabold shadow-2xs">
                       Avg {dayWiseLoginStats.avgPerDay}/day
                     </div>
                   </div>
 
                   {/* Real Day-Wise Bar Chart */}
-                  <div className="pt-4 pb-1 px-1 sm:px-3">
-                    <div className="grid grid-cols-7 items-end gap-2 sm:gap-4 h-44 sm:h-52">
+                  <div className="pt-2 sm:pt-4 pb-1 px-0 sm:px-2 w-full min-w-0">
+                    <div className="grid grid-cols-7 items-end gap-1 sm:gap-3 md:gap-4 h-40 sm:h-52 w-full">
                       {dayWiseLoginStats.bars.map((bar) => {
                         const maxVal = Math.max(1, dayWiseLoginStats.peakCount);
                         const heightPct =
                           bar.count === 0
-                            ? 12
-                            : Math.max(24, Math.round((bar.count / maxVal) * 100));
+                            ? 10
+                            : Math.max(22, Math.round((bar.count / maxVal) * 100));
                         const isPeak =
                           bar.short === dayWiseLoginStats.peakDayShort && bar.count > 0;
                         const isSelected = selectedStatDay === bar.short;
                         const dateParts = (bar.dateLabel || '').split(' ');
 
                         const barStyleClass = isPeak
-                          ? 'bg-gradient-to-b from-[#f43f5e] via-[#8b5cf6] to-[#581c87] ring-4 ring-[#f3e8ff] shadow-md'
+                          ? 'bg-gradient-to-b from-[#f43f5e] via-[#8b5cf6] to-[#581c87] ring-2 sm:ring-4 ring-[#f3e8ff] shadow-sm'
                           : bar.count > 0
                           ? 'bg-gradient-to-b from-[#9d4edd] to-[#6d28d9]'
                           : 'bg-[#d8b4fe]';
@@ -2137,12 +2137,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 prev === bar.short ? 'All' : bar.short
                               )
                             }
-                            className="flex flex-col items-center justify-end h-full group cursor-pointer focus:outline-none"
+                            className="flex flex-col items-center justify-end h-full group cursor-pointer focus:outline-none touch-manipulation select-none py-0.5"
                             title={`${bar.full} (${bar.dateLabel}): ${bar.count} user login(s), ${bar.orderCount} order(s)`}
                           >
                             {/* Real Count Label Above Bar */}
                             <div
-                              className={`text-[11px] sm:text-xs mb-2 tabular-nums flex items-center gap-0.5 ${
+                              className={`text-[10px] sm:text-xs mb-1 sm:mb-2 tabular-nums flex items-center justify-center gap-0.5 leading-none ${
                                 isPeak
                                   ? 'font-black text-[#4c1d95]'
                                   : bar.count > 0
@@ -2151,18 +2151,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }`}
                             >
                               {isPeak && (
-                                <span className="text-amber-500 text-[11px] leading-none">★</span>
+                                <span className="text-amber-500 text-[10px] sm:text-[11px] leading-none">★</span>
                               )}
                               <span>{bar.count}</span>
                             </div>
 
-                            {/* Vertical Rounded Bar */}
-                            <div className="w-full max-w-[44px] flex items-end justify-center flex-1">
+                            {/* Vertical Rounded Bar (GPU accelerated) */}
+                            <div className="w-full max-w-[28px] sm:max-w-[42px] flex items-end justify-center flex-1">
                               <div
-                                className={`w-full rounded-t-[18px] rounded-b-[4px] transition-all duration-300 ${barStyleClass} ${
+                                className={`w-full rounded-t-[12px] sm:rounded-t-[18px] rounded-b-[3px] sm:rounded-b-[4px] transition-transform duration-200 transform-gpu ${barStyleClass} ${
                                   isSelected
-                                    ? 'ring-2 ring-[#4c1d95] scale-[1.03]'
-                                    : 'group-hover:opacity-90'
+                                    ? 'ring-2 ring-[#4c1d95] scale-[1.04]'
+                                    : 'group-hover:opacity-90 active:scale-95'
                                 }`}
                                 style={{ height: `${heightPct}%` }}
                               />
@@ -2170,7 +2170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                             {/* Day Label + Stacked Date Below Bar */}
                             <span
-                              className={`mt-2 text-xs sm:text-sm leading-none ${
+                              className={`mt-1.5 sm:mt-2 text-[10px] sm:text-xs md:text-sm leading-none ${
                                 isPeak || isSelected
                                   ? 'font-black text-[#4c1d95]'
                                   : 'font-bold text-[#64748b]'
@@ -2178,7 +2178,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             >
                               {bar.short}
                             </span>
-                            <span className="text-[9px] sm:text-[10px] font-semibold text-slate-400 mt-1 leading-tight text-center">
+                            <span className="text-[8px] sm:text-[10px] font-semibold text-slate-400 mt-0.5 sm:mt-1 leading-tight text-center">
                               {dateParts[0] || ''}
                               <br />
                               {dateParts[1] || ''}
@@ -2190,32 +2190,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Bottom Footer Stats Row inside Card (Real Supabase Values) */}
-                <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 sm:gap-6">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#f3e8ff] text-[#7c3aed] font-black text-xs sm:text-sm flex items-center justify-center shrink-0">
+                {/* Bottom Footer Stats Row inside Card (Real Supabase Values - Fully responsive without ellipsis cutoff) */}
+                <div className="pt-3.5 sm:pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5 sm:gap-6">
+                  <div className="flex-1 flex items-center gap-3 p-2.5 sm:p-0 rounded-2xl bg-[#faf5ff] sm:bg-transparent border sm:border-0 border-[#f3e8ff] min-w-0">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f3e8ff] text-[#7c3aed] font-black text-xs sm:text-sm flex items-center justify-center shrink-0 shadow-2xs">
                       {dayWiseLoginStats.customerPercent}%
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] sm:text-xs font-medium text-[#94a3b8] truncate">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs font-semibold text-[#8b5cf6] uppercase tracking-wider">
                         Customer Logins
                       </p>
-                      <p className="text-xs sm:text-base font-extrabold text-[#1e293b] truncate">
+                      <p className="text-xs sm:text-base font-extrabold text-[#1e293b] leading-tight mt-0.5">
                         {dayWiseLoginStats.customerCount} Customers · {dayWiseLoginStats.adminCount}{' '}
                         Admins
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#fef3c7] text-[#b45309] font-black text-xs sm:text-sm flex items-center justify-center shrink-0">
+                  <div className="flex-1 flex items-center gap-3 p-2.5 sm:p-0 rounded-2xl bg-[#fffbeb] sm:bg-transparent border sm:border-0 border-[#fef3c7] min-w-0">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#fef3c7] text-[#b45309] font-black text-xs sm:text-sm flex items-center justify-center shrink-0 shadow-2xs">
                       {orders.length}
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] sm:text-xs font-medium text-[#94a3b8] truncate">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs font-semibold text-[#d97706] uppercase tracking-wider">
                         Total Orders &amp; Profiles
                       </p>
-                      <p className="text-xs sm:text-base font-extrabold text-[#1e293b] truncate">
+                      <p className="text-xs sm:text-base font-extrabold text-[#1e293b] leading-tight mt-0.5">
                         {orders.length} Orders · {savedProfiles.length} Profiles
                       </p>
                     </div>

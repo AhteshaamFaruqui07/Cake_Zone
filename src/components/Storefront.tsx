@@ -341,20 +341,20 @@ export const Storefront: React.FC<StorefrontProps> = ({
         className="relative overflow-hidden min-h-[480px] sm:min-h-[560px] md:min-h-[640px] flex items-center py-12 sm:py-16 md:py-24"
         id="home"
       >
-        {/* Full Hero Video Background with Enhanced Color Vibrancy */}
+        {/* Full Hero Video Background with Soft Luminous Whiteness & Rich Patisserie Colors */}
         <video
           src="/assets/aistudio/kling_20261020_VIDEO_Use_the_up_5466_0_97ab3ed5.mp4"
           autoPlay
           loop
           muted
           playsInline
-          className="absolute inset-0 w-full h-full object-cover object-center z-0 filter saturate-[1.15] contrast-[1.03] brightness-[1.02]"
+          className="absolute inset-0 w-full h-full object-cover object-center z-0 filter saturate-[1.18] contrast-[1.02] brightness-[1.07] md:saturate-[1.15] md:contrast-[1.02] md:brightness-[1.05]"
         >
           Your browser does not support the video tag.
         </video>
 
-        {/* Responsive Readability Scrim preserving the pastel blue backdrop */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#E6F4FE]/85 via-[#E6F4FE]/65 to-[#E6F4FE]/35 md:bg-gradient-to-r md:from-[#E6F4FE]/45 md:via-[#E6F4FE]/20 md:to-transparent z-10 pointer-events-none" />
+        {/* Soft Elegant White Tint Scrim adding airy whiteness while keeping video motion vibrant */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-white/22 to-white/35 md:bg-gradient-to-r md:from-white/45 md:via-white/25 md:to-white/15 z-10 pointer-events-none" />
 
         {/* Hero Content Canvas */}
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 md:px-12 w-full">
@@ -384,7 +384,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
             <h1
               aria-label="Crafted with Love, Baked to Perfection"
-              className="text-3xl sm:text-5xl md:text-[62px] font-black font-headline tracking-[-0.03em] text-[#140D26] leading-[1.1] sm:leading-[1.08]"
+              className="text-3xl sm:text-5xl md:text-[62px] font-black font-headline tracking-[-0.03em] text-[#140D26] leading-[1.1] sm:leading-[1.08] drop-shadow-[0_1px_6px_rgba(255,255,255,0.85)] md:drop-shadow-none"
             >
               Crafted with Love,
               <br />
@@ -397,7 +397,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               </span>
             </h1>
 
-            <p className="text-sm sm:text-[15px] md:text-base text-[#2D3A4A] md:text-[#3E4C5E] leading-[1.65] max-w-[480px] font-normal">
+            <p className="text-sm sm:text-[15px] md:text-base text-[#140D26] md:text-[#3E4C5E] leading-[1.65] max-w-[480px] font-medium sm:font-normal drop-shadow-[0_1px_4px_rgba(255,255,255,0.7)] md:drop-shadow-none">
               Experience the pinnacle of patisserie craftsmanship. Each creation is meticulously
               handcrafted using rare ingredients, French butter, and uncompromising passion.
             </p>
@@ -598,6 +598,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     alt={cake.name}
                     className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
+                    decoding="async"
                   />
                   {cake.caption && (
                     <span className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full bg-[#4E2F21]/90 backdrop-blur-xs text-white text-[10px] font-bold tracking-wider uppercase shadow-xs">
@@ -703,6 +704,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
                         }}
                         className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/card:scale-110"
                         loading="lazy"
+                        decoding="async"
                       />
 
                       {/* Top-Left Category Badge */}
@@ -779,6 +781,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
                         }}
                         className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/card:scale-110"
                         loading="lazy"
+                        decoding="async"
                       />
 
                       {/* Top-Left Category Badge */}

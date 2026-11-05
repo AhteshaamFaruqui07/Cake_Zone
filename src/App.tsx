@@ -654,14 +654,15 @@ export default function App() {
           aria-label="Loading CakeZone"
           className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#fbf6f1] px-6 select-none"
         >
-          <div className="relative flex items-center justify-center mb-6">
+          <div className="relative flex items-center justify-center mb-6 transform-gpu">
             {/* Outer Spinning Ring */}
-            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-primary/15 border-t-primary animate-spin" />
+            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-primary/15 border-t-primary animate-spin transform-gpu" />
             {/* Center CakeZone Logo / Animated Cake */}
-            <div className="absolute inset-2.5 rounded-full bg-white shadow-lg border border-primary/20 flex items-center justify-center overflow-hidden">
+            <div className="absolute inset-2.5 rounded-full bg-white shadow-md border border-primary/20 flex items-center justify-center overflow-hidden">
               <img
                 src="https://imagepaste.org/i/rnazzt2e.gif"
                 alt="CakeZone Loading"
+                decoding="async"
                 className="w-full h-full object-cover scale-110"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).src = LOGO_URL;
