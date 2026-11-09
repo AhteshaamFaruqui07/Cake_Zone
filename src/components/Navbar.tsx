@@ -31,10 +31,21 @@ export const Navbar: React.FC<NavbarProps> = ({
     opacity: 1,
   });
   const [isPillMorphing, setIsPillMorphing] = useState(false);
+  const [isCartBouncing, setIsCartBouncing] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const navItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const prevTargetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const handleCartBounce = () => {
+      setIsCartBouncing(true);
+      setTimeout(() => setIsCartBouncing(false), 700);
+    };
+
+    window.addEventListener('cakezone:cart-bounce', handleCartBounce);
+    return () => window.removeEventListener('cakezone:cart-bounce', handleCartBounce);
+  }, []);
 
   useEffect(() => {
     if (currentScreen !== 'storefront') return;
@@ -334,15 +345,32 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Shopping Bag Button */}
           <button
+            id="navbar-cart-button"
             type="button"
             onClick={() => {
               handleProtectedNav(onOpenCart, 'view your shopping bag');
             }}
             aria-label="Shopping Bag"
-            className="relative inline-flex items-center justify-center w-10 h-10 text-on-surface hover:text-primary transition-colors active:scale-95 rounded-full hover:bg-surface-container cursor-pointer shrink-0"
+            className={`relative inline-flex items-center justify-center w-10 h-10 text-on-surface hover:text-primary transition-all rounded-full hover:bg-surface-container cursor-pointer shrink-0 ${
+              isCartBouncing
+                ? 'scale-125 text-[#ff2d55] bg-pink-50 ring-4 ring-[#ff2d55]/30'
+                : 'active:scale-95'
+            }`}
           >
-            <span className="material-symbols-outlined text-[22px] leading-none">shopping_bag</span>
-            <span className="absolute top-0.5 right-0.5 bg-primary text-on-primary text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shadow-xs tabular-nums">
+            <span
+              className={`material-symbols-outlined text-[22px] leading-none transition-transform duration-300 ${
+                isCartBouncing ? 'scale-115 text-[#ff2d55] -rotate-12' : ''
+              }`}
+            >
+              shopping_bag
+            </span>
+            <span
+              className={`absolute top-0.5 right-0.5 bg-primary text-on-primary text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shadow-xs tabular-nums transition-all duration-300 ${
+                isCartBouncing
+                  ? 'scale-135 bg-[#ff2d55] text-white ring-2 ring-white shadow-md'
+                  : ''
+              }`}
+            >
               {cartCount}
             </span>
           </button>

@@ -3514,7 +3514,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               Cover Image, Dietary Note, and Date on which the profile is saved
           ================================================================== */}
           {activeTab === 'Settings' && (
-            <section className="bg-surface-container-low rounded-2xl p-3 sm:p-6 border border-outline-variant/40 flex flex-col gap-5 sm:gap-6 shadow-xs overflow-hidden">
+            <section className="bg-white rounded-2xl p-3 sm:p-6 border border-outline-variant/40 flex flex-col gap-5 sm:gap-6 shadow-xs overflow-hidden">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-outline-variant/30 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shadow-xs shrink-0">
@@ -3534,7 +3534,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Visual Profile Cards with Cover Image Banner */}
               {filteredSavedProfiles.length === 0 ? (
-                <div className="bg-surface rounded-2xl border border-outline-variant/30 p-8 text-center space-y-2">
+                <div className="bg-white rounded-2xl border border-outline-variant/30 p-8 text-center space-y-2 shadow-2xs">
                   <span className="material-symbols-outlined text-3xl text-outline">
                     contact_page
                   </span>
@@ -3548,10 +3548,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ) : (
                 <>
                   {/* Structured Summary Table of All Saved User Profiles (Placed below heading h2) */}
-                  <div className="overflow-x-auto rounded-xl border border-outline-variant/30 bg-surface">
+                  <div className="overflow-x-auto rounded-xl border border-outline-variant/30 bg-white shadow-2xs">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="border-b border-outline-variant/30 bg-surface-container/60 text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                        <tr className="border-b border-outline-variant/30 bg-white text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
                           <th className="py-3 px-4">Cover Image</th>
                           <th className="py-3 px-4">Full Name</th>
                           <th className="py-3 px-4">Email Address</th>
@@ -3583,7 +3583,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           return (
                             <tr
                               key={`row-${profile.id}`}
-                              className="hover:bg-surface-container/40 transition-colors"
+                              className="hover:bg-slate-50 transition-colors bg-white"
                             >
                               <td className="py-3 px-4">
                                 {profile.coverImage ? (
@@ -3661,10 +3661,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       return (
                         <div
                           key={profile.id}
-                          className="bg-surface rounded-xl sm:rounded-2xl border border-outline-variant/40 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col min-w-0"
+                          className="bg-white rounded-xl sm:rounded-2xl border border-outline-variant/40 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col min-w-0"
                         >
                           {/* Cover Image Banner */}
-                          <div className="relative h-24 sm:h-36 w-full bg-surface-container overflow-hidden border-b border-outline-variant/30">
+                          <div className="relative h-24 sm:h-36 w-full bg-slate-100 overflow-hidden border-b border-outline-variant/30">
                             {profile.coverImage ? (
                               <>
                                 <img
@@ -3690,7 +3690,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             )}
 
                             {/* Saved Date Badge */}
-                            <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-surface/90 text-on-surface text-[8.5px] sm:text-[11px] font-bold shadow-xs flex items-center gap-1 backdrop-blur-xs max-w-[92%] truncate">
+                            <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-white/95 text-on-surface text-[8.5px] sm:text-[11px] font-bold shadow-xs flex items-center gap-1 backdrop-blur-xs max-w-[92%] truncate">
                               <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary shrink-0">
                                 event_available
                               </span>
@@ -3704,7 +3704,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
 
                           {/* Profile Body */}
-                          <div className="p-2.5 sm:p-5 flex-1 flex flex-col justify-between gap-2.5 sm:gap-4 min-w-0">
+                          <div className="p-2.5 sm:p-5 flex-1 flex flex-col justify-between gap-2.5 sm:gap-4 min-w-0 bg-white">
                             <div className="space-y-2 sm:space-y-3.5 min-w-0">
                               {/* Avatar + Full Name + Role */}
                               <div className="flex items-start justify-between gap-1.5 sm:gap-3 min-w-0">
@@ -3756,7 +3756,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                               {/* Details Grid: Email Address, Mobile No, Your Address, Date Saved */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2.5 pt-0.5 sm:pt-1 min-w-0">
-                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 min-w-0">
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-slate-50/90 border border-outline-variant/30 min-w-0">
                                   <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
                                     <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
                                       mail
@@ -3768,7 +3768,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </p>
                                 </div>
 
-                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 min-w-0">
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-slate-50/90 border border-outline-variant/30 min-w-0">
                                   <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
                                     <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
                                       call
@@ -3780,7 +3780,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </p>
                                 </div>
 
-                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2 min-w-0">
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-slate-50/90 border border-outline-variant/30 sm:col-span-2 min-w-0">
                                   <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
                                     <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
                                       location_on
@@ -3794,7 +3794,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </p>
                                 </div>
 
-                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-surface-container/50 border border-outline-variant/25 sm:col-span-2 min-w-0">
+                                <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-slate-50/90 border border-outline-variant/30 sm:col-span-2 min-w-0">
                                   <span className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
                                     <span className="material-symbols-outlined text-[10px] sm:text-xs text-primary">
                                       restaurant

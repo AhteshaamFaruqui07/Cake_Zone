@@ -371,10 +371,30 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
       )}
 
       {/* Footer */}
-      <footer className="bg-surface-container-low w-full border-t border-outline-variant">
-        <div className="flex flex-col md:flex-row justify-between items-center px-6 py-8 max-w-7xl mx-auto gap-6">
-          <div className="text-sm text-on-surface-variant font-label">
+      <footer className="bg-surface-container-low w-full border-t border-outline-variant py-6">
+        <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 max-w-7xl mx-auto gap-4 text-xs text-on-surface-variant text-center sm:text-left">
+          <div className="font-label">
             © 2027 CakeZone. All rights reserved.
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+            <a
+              href="https://www.google.com/maps/search/?api=1&query=2488+Behind+dr+taqi+raza+ghantaghar+jabalpur"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors inline-flex items-center gap-1.5"
+              title="Open location in Google Maps"
+            >
+              <span className="material-symbols-outlined text-sm text-primary">location_on</span>
+              <span>2488 Behind dr taqi raza ghantaghar jabalpur</span>
+            </a>
+            <a
+              href="tel:+919399736018"
+              className="hover:text-primary font-semibold transition-colors inline-flex items-center gap-1.5"
+              title="Call +91 93997 36018"
+            >
+              <span className="material-symbols-outlined text-sm text-primary">call</span>
+              <span>+91 93997 36018</span>
+            </a>
           </div>
         </div>
       </footer>

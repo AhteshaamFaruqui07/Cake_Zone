@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CakeProduct, GalleryItem, GallerySectionSettings } from '../types';
 import {
   HERO_CAKE_URL,
+  LOGO_URL,
   SIGNATURE_CAKES,
   REVIEWS,
   INITIAL_GALLERY_ITEMS,
@@ -13,6 +14,7 @@ import {
   deleteGalleryItemFromDb,
   saveGallerySectionSettings,
 } from '../services/supabaseData';
+import { triggerFlyToCart } from './FlyToCartOverlay';
 
 interface StorefrontProps {
   cakes?: CakeProduct[];
@@ -23,7 +25,8 @@ interface StorefrontProps {
   isAdmin?: boolean;
   onShowToast?: (msg: string) => void;
   onQuickView: (cake: CakeProduct) => void;
-  onOrderNow: (cake: CakeProduct) => void;
+  onOrderNow: (cake: CakeProduct, sourceEl?: HTMLElement) => void;
+  onAddToCart?: (cake: CakeProduct, sourceEl?: HTMLElement) => void;
   onOpenConfigurator: () => void;
   userName?: string;
   onUpdateUserName?: (name: string) => void;
@@ -41,6 +44,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
   onShowToast,
   onQuickView,
   onOrderNow,
+  onAddToCart,
   onOpenConfigurator,
   userName,
   onUpdateUserName,
@@ -1394,55 +1398,359 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
       {/* Footer */}
       <footer
-        className="bg-surface-container-low dark:bg-surface-container w-full border-t border-outline-variant"
+        className="relative bg-[#060408] text-slate-300 w-full overflow-hidden border-t border-pink-500/20"
         id="contact"
       >
-        <div className="flex flex-col md:flex-row justify-between items-center px-4 sm:px-6 py-8 max-w-7xl mx-auto gap-5 sm:gap-6 text-center md:text-left">
-          <div className="text-lg font-bold text-primary font-headline">CakeZone</div>
-          <div className="flex flex-wrap justify-center gap-4 sm:gap-6 text-xs sm:text-sm font-label">
-            <a
-              className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                setActivePolicyModal('privacy');
-              }}
-              href="#privacy"
-            >
-              Privacy Policy
-            </a>
-            <a
-              className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                setActivePolicyModal('terms');
-              }}
-              href="#terms"
-            >
-              Terms of Service
-            </a>
-            <a
-              className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                setActivePolicyModal('faq');
-              }}
-              href="#faq"
-            >
-              FAQ
-            </a>
-            <a
-              className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                setActivePolicyModal('shipping');
-              }}
-              href="#shipping"
-            >
-              Shipping Info
-            </a>
+        {/* Ambient Glowing Silk Waves & Bokeh (Pure CSS & SVG, no ghost text artifacts) */}
+        {/* Top-Left Silk Wave */}
+        <div className="absolute -top-10 -left-10 w-72 h-40 pointer-events-none select-none overflow-hidden">
+          <svg className="w-full h-full opacity-80" viewBox="0 0 280 160" fill="none">
+            <path
+              d="M-20 0C60 40 140 10 240 100C290 145 220 180 160 160C100 140 20 60 -20 80Z"
+              fill="url(#pinkWaveGradTL)"
+            />
+            <defs>
+              <linearGradient id="pinkWaveGradTL" x1="0" y1="0" x2="240" y2="120" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#ff2d55" stopOpacity="0.8" />
+                <stop offset="0.5" stopColor="#e11d48" stopOpacity="0.4" />
+                <stop offset="1" stopColor="#ff2d55" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div className="absolute top-0 left-0 w-64 h-32 bg-pink-600/15 blur-2xl pointer-events-none" />
+
+        {/* Bottom-Left Silk Wave */}
+        <div className="absolute -bottom-10 -left-10 w-80 h-44 pointer-events-none select-none overflow-hidden">
+          <svg className="w-full h-full opacity-75" viewBox="0 0 320 180" fill="none">
+            <path
+              d="M-20 180C60 120 160 150 260 80C310 45 270 10 200 40C130 70 30 140 -20 110Z"
+              fill="url(#pinkWaveGradBL)"
+            />
+            <defs>
+              <linearGradient id="pinkWaveGradBL" x1="0" y1="180" x2="280" y2="60" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#ff2d55" stopOpacity="0.75" />
+                <stop offset="0.6" stopColor="#f43f5e" stopOpacity="0.35" />
+                <stop offset="1" stopColor="#ff2d55" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div className="absolute bottom-0 left-0 w-72 h-32 bg-pink-600/15 blur-2xl pointer-events-none" />
+
+        <div className="absolute top-0 right-16 w-96 h-96 bg-pink-600/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Right side artisanal cake showcase (desktop) */}
+        <div className="absolute top-0 right-0 bottom-0 w-[280px] xl:w-[340px] 2xl:w-[400px] pointer-events-none hidden xl:block overflow-hidden select-none">
+          <img
+            src="/assets/footer_cake_right.png"
+            alt="CakeZone Artisanal Cake"
+            className="w-full h-full object-cover object-left opacity-90"
+          />
+          <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#060408] via-[#060408]/85 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#060408] to-transparent" />
+        </div>
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-14 pb-6">
+          {/* Main Footer 4-Column Grid with vertical pink hairline dividers */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-0 pb-10">
+            {/* Column 1: Brand & Socials */}
+            <div className="lg:col-span-4 lg:pr-8 lg:border-r lg:border-pink-500/20 space-y-4 text-left">
+              <div className="flex items-center gap-3.5">
+                {/* Circular Gold/Pink Framed Badge */}
+                <div className="relative w-14 h-14 rounded-full p-[2px] bg-gradient-to-br from-[#ffd700] via-[#ff2d55] to-[#ffd700] shrink-0 shadow-lg shadow-pink-950/40">
+                  <img
+                    src="/assets/aistudio/cropped_circle_image_7d4789a4.png"
+                    alt="CakeZone Logo"
+                    className="w-full h-full rounded-full object-cover bg-black"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = LOGO_URL;
+                    }}
+                  />
+                </div>
+
+                {/* Thin vertical separator */}
+                <div className="h-10 w-[1.5px] bg-white/20 shrink-0" />
+
+                {/* Brand Title and Tagline */}
+                <div className="min-w-0">
+                  <div className="text-2xl sm:text-[28px] font-black tracking-tight font-headline text-white leading-none">
+                    Cake<span className="text-[#ff2d55]">Zone</span>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-[9px] sm:text-[10px] font-bold tracking-[0.2em] text-slate-300 uppercase block leading-tight font-sans">
+                      SWEET MOMENTS, ALWAYS
+                    </span>
+                    {/* Pink curve accent line underneath */}
+                    <div className="w-20 h-[2px] bg-gradient-to-r from-[#ff2d55] via-pink-400 to-transparent rounded-full mt-1" />
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs sm:text-[13px] text-slate-300/90 leading-relaxed max-w-sm font-sans">
+                Your trusted boutique for handcrafted cakes, bespoke custom creations, and 100% eggless deliciousness since 2020.
+              </p>
+
+              {/* Social Logo Badges (Instagram & WhatsApp) */}
+              <div className="flex items-center gap-3 pt-2">
+                <a
+                  href="https://www.instagram.com/the_cake_zone_00/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] text-white flex items-center justify-center shadow-md hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer"
+                  title="Instagram: @the_cake_zone_00"
+                  aria-label="Instagram"
+                >
+                  <svg className="w-4.5 h-4.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+                  </svg>
+                </a>
+                <a
+                  href="https://wa.me/919399736018"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-xl bg-[#25D366] text-white flex items-center justify-center shadow-md hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer"
+                  title="WhatsApp: +91 93997 36018"
+                  aria-label="WhatsApp"
+                >
+                  <svg className="w-4.5 h-4.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            {/* Column 2: Quick Links */}
+            <div className="lg:col-span-2 lg:px-6 lg:border-r lg:border-pink-500/20 space-y-4 text-left">
+              <div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#ff2d55] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 19h18v-5l-9-5-9 5v5z" />
+                    <path d="M3 14h18" />
+                    <path d="M12 9V4" />
+                    <circle cx="12" cy="3" r="1.25" fill="#ff2d55" stroke="none" />
+                  </svg>
+                  <h3 className="text-sm font-bold text-white tracking-tight font-headline">
+                    Quick Links
+                  </h3>
+                </div>
+                <div className="w-8 h-[2px] bg-[#ff2d55] rounded-full mt-1.5" />
+              </div>
+
+              <ul className="space-y-2.5 text-xs sm:text-[13px]">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('home');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      else window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Home</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('collections');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Collections</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('inspiration-gallery');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Gallery</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('about');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>About</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => onOpenConfigurator()}
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Custom Cake</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('testimonials');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Testimonial</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Column 3: Information & Policies */}
+            <div className="lg:col-span-3 lg:px-6 lg:border-r lg:border-pink-500/20 space-y-4 text-left">
+              <div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#ff2d55] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                  <h3 className="text-sm font-bold text-white tracking-tight font-headline">
+                    Information & Policies
+                  </h3>
+                </div>
+                <div className="w-8 h-[2px] bg-[#ff2d55] rounded-full mt-1.5" />
+              </div>
+
+              <ul className="space-y-2.5 text-xs sm:text-[13px]">
+                <li>
+                  <button
+                    type="button"
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                    onClick={() => setActivePolicyModal('privacy')}
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Privacy Policy</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                    onClick={() => setActivePolicyModal('terms')}
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Terms of Service</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                    onClick={() => setActivePolicyModal('faq')}
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Frequently Asked Questions</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className="text-slate-300 hover:text-white transition-colors cursor-pointer text-left font-medium flex items-center group"
+                    onClick={() => setActivePolicyModal('shipping')}
+                  >
+                    <span className="text-[#ff2d55] font-bold text-sm mr-2 transition-transform group-hover:translate-x-0.5">›</span>
+                    <span>Shipping & Delivery Info</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Column 4: Get In Touch */}
+            <div className="lg:col-span-3 lg:pl-6 space-y-4 text-left">
+              <div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#ff2d55] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m22 2-7 20-4-9-9-4Z" />
+                    <path d="M22 2 11 13" />
+                  </svg>
+                  <h3 className="text-sm font-bold text-white tracking-tight font-headline">
+                    Get In Touch
+                  </h3>
+                </div>
+                <div className="w-8 h-[2px] bg-[#ff2d55] rounded-full mt-1.5" />
+              </div>
+
+              <div className="space-y-3 pt-1 text-xs sm:text-[13px]">
+                {/* Location */}
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=2488+Behind+dr+taqi+raza+ghantaghar+jabalpur"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-2.5 text-slate-300 hover:text-white transition-colors"
+                  title="View on Google Maps"
+                >
+                  <div className="w-7 h-7 rounded-full bg-[#1e0e18] border border-pink-500/30 flex items-center justify-center shrink-0 text-[#ff2d55] group-hover:scale-110 group-hover:border-[#ff2d55] transition-all mt-0.5">
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                    </svg>
+                  </div>
+                  <span className="leading-snug">
+                    2488 Behind dr taqi raza ghantaghar jabalpur
+                  </span>
+                </a>
+
+                {/* Phone */}
+                <a
+                  href="tel:+919399736018"
+                  className="group flex items-center gap-2.5 text-slate-300 hover:text-white transition-colors font-medium"
+                  title="Call +91 93997 36018"
+                >
+                  <div className="w-7 h-7 rounded-full bg-[#1e0e18] border border-pink-500/30 flex items-center justify-center shrink-0 text-[#ff2d55] group-hover:scale-110 group-hover:border-[#ff2d55] transition-all">
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                    </svg>
+                  </div>
+                  <span>+91 93997 36018</span>
+                </a>
+
+                {/* Email */}
+                <a
+                  href="mailto:thecakezone00@gmail.com"
+                  className="group flex items-center gap-2.5 text-slate-300 hover:text-white transition-colors"
+                  title="Email CakeZone"
+                >
+                  <div className="w-7 h-7 rounded-full bg-[#1e0e18] border border-pink-500/30 flex items-center justify-center shrink-0 text-[#ff2d55] group-hover:scale-110 group-hover:border-[#ff2d55] transition-all">
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
+                    </svg>
+                  </div>
+                  <span>thecakezone00@gmail.com</span>
+                </a>
+              </div>
+            </div>
           </div>
-          <div className="text-xs sm:text-sm text-on-surface-variant">
-            © 2027 CakeZone. All rights reserved.
+
+          {/* Bottom Copyright & Made with Love */}
+          <div className="border-t border-pink-500/25 pt-4 flex flex-col sm:flex-row justify-between items-center gap-3 text-center sm:text-left text-xs">
+            <div className="text-slate-400 font-sans">
+              ⓒ 2027 <strong className="text-[#ff2d55] font-bold">CakeZone</strong>. All rights reserved. Handcrafted Eggless Creations.
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="h-3 w-[1px] bg-slate-700 hidden sm:inline-block" />
+              <span className="text-[#ff2d55] text-sm">♥</span>
+              <span className="italic text-slate-300 font-sans">Made with Love in Jabalpur</span>
+            </div>
           </div>
         </div>
       </footer>

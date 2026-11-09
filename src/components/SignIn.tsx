@@ -6,6 +6,7 @@ import {
   checkAccountExistsByEmail,
   registerKnownAccountEmail,
 } from '../services/supabaseData';
+import { LOGO_URL } from '../data/initialData';
 
 interface SignInProps {
   onNavigate: (screen: ScreenType) => void;
@@ -15,7 +16,7 @@ interface SignInProps {
 }
 
 const SIGNUP_SUCCESS_MESSAGE =
-  'Your account has been created. Please check your email and verify your address before logging in.';
+  'Your account has been created successfully! You can now sign in to continue.';
 
 export const SignIn: React.FC<SignInProps> = ({
   onNavigate,
@@ -212,9 +213,13 @@ export const SignIn: React.FC<SignInProps> = ({
           <div className="relative z-10 text-center mb-2.5">
             <div className="inline-flex items-center justify-center w-20 h-20 sm:w-22 sm:h-22 rounded-2xl bg-primary/10 border border-primary/20 text-primary mb-1 shadow-xs overflow-hidden">
               <img
-                src="https://imagepaste.org/i/rnazzt2e.gif"
+                src={LOGO_URL}
                 alt="CakeZone"
+                decoding="async"
                 className="w-full h-full object-cover scale-110"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/assets/cakezone_logo.png';
+                }}
               />
             </div>
             <h1 className="text-xl sm:text-2xl font-headline font-bold text-on-surface tracking-tight mb-0.5">
@@ -523,10 +528,30 @@ export const SignIn: React.FC<SignInProps> = ({
       )}
 
       {/* Footer */}
-      <footer className="bg-surface-container-low w-full border-t border-outline-variant">
-        <div className="flex flex-col md:flex-row justify-between items-center px-6 py-8 max-w-7xl mx-auto gap-6">
-          <div className="text-sm text-on-surface-variant font-label">
+      <footer className="bg-surface-container-low w-full border-t border-outline-variant py-6">
+        <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 max-w-7xl mx-auto gap-4 text-xs text-on-surface-variant text-center sm:text-left">
+          <div className="font-label">
             © 2027 CakeZone. All rights reserved.
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+            <a
+              href="https://www.google.com/maps/search/?api=1&query=2488+Behind+dr+taqi+raza+ghantaghar+jabalpur"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors inline-flex items-center gap-1.5"
+              title="Open location in Google Maps"
+            >
+              <span className="material-symbols-outlined text-sm text-primary">location_on</span>
+              <span>2488 Behind dr taqi raza ghantaghar jabalpur</span>
+            </a>
+            <a
+              href="tel:+919399736018"
+              className="hover:text-primary font-semibold transition-colors inline-flex items-center gap-1.5"
+              title="Call +91 93997 36018"
+            >
+              <span className="material-symbols-outlined text-sm text-primary">call</span>
+              <span>+91 93997 36018</span>
+            </a>
           </div>
         </div>
       </footer>

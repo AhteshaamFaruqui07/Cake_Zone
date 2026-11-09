@@ -46,6 +46,7 @@ import { QuickViewModal } from './components/QuickViewModal';
 import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { UpdatePassword } from './components/UpdatePassword';
 import { UserProfile } from './components/UserProfile';
+import { CakeZoneWaveLoader } from './components/CakeZoneWaveLoader';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>(() => {
@@ -97,17 +98,18 @@ export default function App() {
   const [registeredEmail, setRegisteredEmail] = useState<string>('');
   const [authSuccessMessage, setAuthSuccessMessage] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
-  const [loaderProgressStarted, setLoaderProgressStarted] = useState<boolean>(false);
+  const [isLoaderFading, setIsLoaderFading] = useState<boolean>(false);
 
   useEffect(() => {
-    const startTimer = window.setTimeout(() => {
-      setLoaderProgressStarted(true);
-    }, 30);
+    // Smooth fade out starts at 1850ms as wave reaches full coverage at 2000ms
+    const fadeTimer = window.setTimeout(() => {
+      setIsLoaderFading(true);
+    }, 1900);
     const loaderTimer = window.setTimeout(() => {
       setIsInitialLoading(false);
-    }, 3000);
+    }, 2150);
     return () => {
-      window.clearTimeout(startTimer);
+      window.clearTimeout(fadeTimer);
       window.clearTimeout(loaderTimer);
     };
   }, []);
@@ -262,7 +264,7 @@ export default function App() {
           setRegisteredEmail(emailParam);
         }
         if (params.get('signup') === 'success') {
-          setAuthSuccessMessage('Your account has been created. Please check your email and verify your address before logging in.');
+          setAuthSuccessMessage('Your account has been created successfully! You can now sign in to continue.');
         }
         if (session?.user && !params.get('signup')) {
           window.history.replaceState(null, '', '/');
@@ -648,52 +650,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container relative">
-      {/* 3-Second CakeZone Startup Preloader */}
+      {/* 2-Second Brevo-Style Liquid Wave Preloader in CakeZone Text */}
       {isInitialLoading && (
         <aside
           aria-label="Loading CakeZone"
-          className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#fbf6f1] px-6 select-none"
+          className={`fixed inset-0 z-[200] flex flex-col items-center justify-center bg-white px-6 select-none transition-opacity duration-300 ${
+            isLoaderFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
         >
-          <div className="relative flex items-center justify-center mb-6 transform-gpu">
-            {/* Outer Spinning Ring */}
-            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-primary/15 border-t-primary animate-spin transform-gpu" />
-            {/* Center CakeZone Logo / Animated Cake */}
-            <div className="absolute inset-2.5 rounded-full bg-white shadow-md border border-primary/20 flex items-center justify-center overflow-hidden">
-              <img
-                src="https://imagepaste.org/i/rnazzt2e.gif"
-                alt="CakeZone Loading"
-                decoding="async"
-                className="w-full h-full object-cover scale-110"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = LOGO_URL;
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 mb-2">
-            <img
-              src={LOGO_URL}
-              alt="CakeZone Logo"
-              className="w-8 h-8 rounded-full object-cover shadow-xs"
-            />
-            <h1 className="text-2xl sm:text-3xl font-black font-headline text-primary tracking-tight">
-              CakeZone
-            </h1>
-          </div>
-
-          <p className="text-xs sm:text-sm font-medium text-on-surface-variant tracking-widest uppercase mb-6 text-center">
-            Sweet Moments • Happy People
-          </p>
-
-          {/* Animated 3-Second Progress Bar */}
-          <div className="w-48 sm:w-56 h-1.5 bg-primary/15 rounded-full overflow-hidden">
-            <div
-              className={`h-full bg-gradient-to-r from-primary/70 via-primary to-primary rounded-full transition-[width] duration-[2950ms] ease-linear ${
-                loaderProgressStarted ? 'w-full' : 'w-0'
-              }`}
-            />
-          </div>
+          <CakeZoneWaveLoader />
         </aside>
       )}
 
@@ -801,7 +766,7 @@ export default function App() {
           onSignUpSuccess={(email) => {
             setRegisteredEmail(email);
             setAuthSuccessMessage(
-              'Your account has been created. Please check your email and verify your address before logging in.'
+              'Your account has been created successfully! You can now sign in to continue.'
             );
             window.history.pushState(null, '', `/login?email=${encodeURIComponent(email)}&signup=success`);
             setCurrentScreen('signin');
