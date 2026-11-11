@@ -13,6 +13,8 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [activePolicyModal, setActivePolicyModal] = useState<'terms' | 'privacy' | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -181,13 +183,24 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
                     <span className="material-symbols-outlined text-lg">lock</span>
                   </span>
                   <input
-                    className="w-full pl-10 pr-3 py-2.5 sm:py-3 bg-white/95 border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
+                    className="w-full pl-10 pr-10 py-2.5 sm:py-3 bg-white/95 border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
                     placeholder="••••••••"
                     required
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-outline hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-lg">
+                      {showPassword ? 'visibility' : 'visibility_off'}
+                    </span>
+                  </button>
                 </div>
               </div>
 
@@ -200,13 +213,24 @@ export const SignUp: React.FC<SignUpProps> = ({ onNavigate, onSignUpSuccess }) =
                     <span className="material-symbols-outlined text-lg">lock_reset</span>
                   </span>
                   <input
-                    className="w-full pl-10 pr-3 py-2.5 sm:py-3 bg-white/95 border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
+                    className="w-full pl-10 pr-10 py-2.5 sm:py-3 bg-white/95 border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
                     placeholder="••••••••"
                     required
-                    type="password"
+                    type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-outline hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-lg">
+                      {showConfirmPassword ? 'visibility' : 'visibility_off'}
+                    </span>
+                  </button>
                 </div>
               </div>
             </div>

@@ -809,6 +809,13 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                                   step.idx === 3 && stepIndex === 3;
                                 const isActivePending =
                                   step.idx === 1 && stepIndex === 1;
+                                const isCompletedStep =
+                                  isPendingYellow || isBakingPurple || isReadyGreen;
+                                const reverbRingStyle = isPendingYellow
+                                  ? 'border-2 border-[#F5B014]/75 bg-[#F5B014]/20 shadow-[0_0_14px_rgba(245,176,20,0.42)]'
+                                  : isBakingPurple
+                                  ? 'border-2 border-[#6841B8]/75 bg-[#6841B8]/20 shadow-[0_0_14px_rgba(104,65,184,0.42)]'
+                                  : 'border-2 border-[#0FA976]/75 bg-[#0FA976]/20 shadow-[0_0_14px_rgba(15,169,118,0.42)]';
 
                                 return (
                                   <div
@@ -817,8 +824,20 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                                   >
                                     {/* Circular Step Node */}
                                     <div className="relative mb-2.5 flex items-center justify-center">
+                                      {isCompletedStep && (
+                                        <>
+                                          <span
+                                            aria-hidden="true"
+                                            className={`status-reverb-ring z-0 ${reverbRingStyle}`}
+                                          />
+                                          <span
+                                            aria-hidden="true"
+                                            className={`status-reverb-ring status-reverb-ring-delayed z-0 ${reverbRingStyle}`}
+                                          />
+                                        </>
+                                      )}
                                       <div
-                                        className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
+                                        className={`relative z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
                                           isPendingYellow
                                             ? 'bg-[#F5B014] text-white ring-[5px] ring-[#FEF3C7] shadow-[0_6px_16px_rgba(245,176,20,0.28)]'
                                             : isBakingPurple
@@ -841,7 +860,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
 
                                       {/* Active / Baking Status Dot on Top-Right */}
                                       {(isBakingPurple || isActivePending) && (
-                                        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#F5B014] border-[2.5px] border-white shadow-sm" />
+                                        <span className="absolute -top-0.5 -right-0.5 z-20 w-4 h-4 rounded-full bg-[#F5B014] border-[2.5px] border-white shadow-sm" />
                                       )}
                                     </div>
 

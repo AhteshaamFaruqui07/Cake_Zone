@@ -708,9 +708,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <defs>
                   <linearGradient id="mobileNavWaveGrad" x1="0%" y1="50%" x2="100%" y2="50%">
-                    <stop offset="0%" stopColor="#9e6258" />
-                    <stop offset="50%" stopColor="#b87c6c" />
-                    <stop offset="100%" stopColor="#d69c85" />
+                    <stop offset="0%" stopColor="#9b3b60" />
+                    <stop offset="50%" stopColor="#c74f7d" />
+                    <stop offset="100%" stopColor="#ec6397" />
                   </linearGradient>
                 </defs>
                 <path

@@ -1743,10 +1743,10 @@ export const sendOrderReadyEmailNotification = async (order: {
 
   // 1. Automatic EmailJS REST API dispatch (works directly from browser & Vercel)
   const rawServiceId = (
-    import.meta.env.VITE_EMAILJS_SERVICE_ID || 'default_service'
+    import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_ui38l76'
   ).trim();
   const rawTemplateId = (
-    import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_50iyj49'
+    import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '1h1c1bt'
   ).trim();
   const emailJsPublicKey = (
     import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'BGQzEiGCJqRY1sYIS'
@@ -1790,14 +1790,14 @@ export const sendOrderReadyEmailNotification = async (order: {
     };
 
     const candidateServiceIds = Array.from(
-      new Set(['default_service', rawServiceId, 'service_6iqk1xs'].filter(Boolean))
+      new Set([rawServiceId, 'default_service', 'service_6iqk1xs'].filter(Boolean))
     );
     const candidateTemplateIds = Array.from(
       new Set([
-        'template_50iyj49',
         ...(rawTemplateId.startsWith('template_')
           ? [rawTemplateId, rawTemplateId.replace(/^template_/, '')]
-          : [`template_${rawTemplateId}`, rawTemplateId]),
+          : [rawTemplateId, `template_${rawTemplateId}`]),
+        'template_50iyj49',
       ])
     );
 

@@ -110,6 +110,63 @@
   }
 }
 
+@keyframes gentle-breathe-loop {
+  0%, 100% {
+    transform: scale(0.93);
+    filter: drop-shadow(0 2px 6px rgba(219, 39, 119, 0.2));
+  }
+  50% {
+    transform: scale(1.03);
+    filter: drop-shadow(0 6px 14px rgba(219, 39, 119, 0.45));
+  }
+}
+
+.cakezone-gentle-breathe {
+  animation: gentle-breathe-loop 2.4s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cakezone-gentle-breathe {
+    animation: none !important;
+  }
+}
+
+@keyframes status-reverb-pulse {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.78;
+  }
+  65% {
+    opacity: 0.22;
+  }
+  100% {
+    transform: scale(1.54);
+    opacity: 0;
+  }
+}
+
+.status-reverb-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: status-reverb-pulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.status-reverb-ring-delayed {
+  animation-delay: 1.1s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-reverb-ring {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
 @keyframes explore-wave-rotate {
   0% {
     transform: translate3d(-50%, 0, 0) rotate(0deg);
@@ -340,7 +397,7 @@
 }
 
 /* ==========================================================================
-   Category Filter Buttons - Glass Shining Hover Effect
+   Category Filter Buttons - Color Hover & Light Sweep Effect
    ========================================================================== */
 
 .category-glass-shine-btn {
@@ -357,53 +414,51 @@
     color 0.3s ease;
 }
 
-/* Subtle glossy glass top-edge highlight on hover */
+/* Rich brand color gradient revealed smoothly on hover */
 .category-glass-shine-btn::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.45) 0%,
-    rgba(255, 255, 255, 0.08) 48%,
-    rgba(255, 255, 255, 0.18) 100%
-  );
+  background: linear-gradient(135deg, #6841B8 0%, #8B38C7 55%, #C0488A 100%);
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
-  z-index: 1;
+  z-index: 0;
 }
 
-/* Diagonal sweeping glass shine beam */
+.category-glass-shine-btn.is-active::after {
+  background: linear-gradient(135deg, #4E2F21 0%, #7C3AED 100%);
+}
+
+/* Diagonal sweeping light beam ("light sweep") */
 .category-glass-shine-btn::before {
   content: "";
   position: absolute;
-  top: -20%;
-  bottom: -20%;
-  left: -10%;
-  width: 65%;
+  top: -30%;
+  bottom: -30%;
+  left: -20%;
+  width: 55%;
   background: linear-gradient(
-    115deg,
-    rgba(255, 255, 255, 0) 10%,
-    rgba(255, 255, 255, 0.3) 35%,
-    rgba(255, 255, 255, 0.92) 50%,
-    rgba(255, 255, 255, 0.3) 65%,
-    rgba(255, 255, 255, 0) 90%
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.25) 35%,
+    rgba(255, 255, 255, 0.88) 50%,
+    rgba(255, 255, 255, 0.25) 65%,
+    rgba(255, 255, 255, 0) 100%
   );
-  transform: translateX(-170%) skewX(-24deg);
+  transform: translateX(-160%) skewX(-24deg);
   transition: transform 0s;
   pointer-events: none;
-  z-index: 2;
+  z-index: 20;
 }
 
 .category-glass-shine-btn:hover,
 .category-glass-shine-btn:focus-visible {
-  transform: translateY(-1.5px);
+  transform: translateY(-2px);
   box-shadow:
-    inset 0 1px 1.5px rgba(255, 255, 255, 0.85),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.3),
-    0 6px 16px -4px rgba(78, 47, 33, 0.2);
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.55),
+    0 8px 20px -4px rgba(104, 65, 184, 0.42);
 }
 
 .category-glass-shine-btn:hover::after,
@@ -413,7 +468,7 @@
 
 .category-glass-shine-btn:hover::before,
 .category-glass-shine-btn:focus-visible::before {
-  transform: translateX(270%) skewX(-24deg);
+  transform: translateX(320%) skewX(-24deg);
   transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -490,7 +545,6 @@
   .category-glass-shine-btn {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    background-color: rgba(255, 255, 255, 0.96) !important;
   }
 
   /* Prevent inertial touch-scroll stutter */

@@ -37,6 +37,7 @@ export const SignIn: React.FC<SignInProps> = ({
     return '';
   });
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(() => {
     if (successMessage) return successMessage;
     if (typeof window !== 'undefined') {
@@ -211,12 +212,12 @@ export const SignIn: React.FC<SignInProps> = ({
           <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary/30 via-primary to-primary/30 z-10" />
 
           <div className="relative z-10 text-center mb-2.5">
-            <div className="inline-flex items-center justify-center w-20 h-20 sm:w-22 sm:h-22 rounded-2xl bg-primary/10 border border-primary/20 text-primary mb-1 shadow-xs overflow-hidden">
+            <div className="inline-flex items-center justify-center w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-transparent mb-1">
               <img
                 src={LOGO_URL}
                 alt="CakeZone"
                 decoding="async"
-                className="w-full h-full object-cover scale-110"
+                className="w-full h-full object-cover rounded-full cakezone-gentle-breathe"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).src = '/assets/cakezone_logo.png';
                 }}
@@ -280,13 +281,24 @@ export const SignIn: React.FC<SignInProps> = ({
                   <span className="material-symbols-outlined text-lg">lock</span>
                 </span>
                 <input
-                  className="w-full pl-11 pr-4 py-2.5 bg-surface border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
+                  className="w-full pl-11 pr-11 py-2.5 bg-surface border border-outline-variant/70 rounded-xl text-on-surface text-sm placeholder:text-outline/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-xs"
                   placeholder="••••••••"
                   required
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-outline hover:text-primary transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">
+                    {showPassword ? 'visibility' : 'visibility_off'}
+                  </span>
+                </button>
               </div>
             </div>
 

@@ -500,8 +500,8 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     onClick={() => setSelectedCategory(category)}
                     className={`category-glass-shine-btn px-3.5 sm:px-4 xl:px-5 py-2 rounded-full text-xs sm:text-sm font-medium cursor-pointer shrink-0 whitespace-nowrap ${
                       isActive
-                        ? 'bg-[#4E2F21] text-white border border-[#4E2F21] shadow-xs'
-                        : 'bg-[#FAF6F0]/90 text-[#2D2420] border border-[#E4DDD3] hover:border-[#4E2F21]/40 hover:bg-[#F3ECE2]/95'
+                        ? 'is-active bg-[#4E2F21] text-white border border-[#4E2F21] shadow-xs hover:border-[#7C3AED]'
+                        : 'bg-[#FAF6F0]/90 text-[#2D2420] border border-[#E4DDD3] hover:text-white hover:border-[#6841B8]'
                     }`}
                   >
                     <span className="relative z-10">{category}</span>
