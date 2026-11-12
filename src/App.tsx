@@ -68,7 +68,15 @@ export default function App() {
       ) {
         return 'dashboard';
       }
-      if (path === '/profile') return 'profile';
+      if (
+        path === '/profile' ||
+        path.startsWith('/profile/') ||
+        path === '/track-orders' ||
+        path === '/track-order' ||
+        path.startsWith('/track')
+      ) {
+        return 'profile';
+      }
       if (path === '/login' || path === '/signin') return 'signin';
       if (path === '/signup') return 'signup';
     }
@@ -243,9 +251,13 @@ export default function App() {
 
       if (isAdminRoute || isProfileRoute) {
         if (!session) {
-          window.history.replaceState(null, '', '/login');
+          const currentSearch = window.location.search;
+          const loginTarget = currentSearch
+            ? `/login${currentSearch}&return_to=${isProfileRoute ? 'profile' : 'dashboard'}`
+            : `/login?return_to=${isProfileRoute ? 'profile' : 'dashboard'}`;
+          window.history.replaceState(null, '', loginTarget);
           setCurrentScreen('signin');
-          showToast('Please sign in to access your profile.');
+          showToast('Please sign in to access your order tracking & profile.');
         } else {
           if (isAdminRoute && isAdmin) {
             setCurrentScreen('dashboard');
@@ -751,8 +763,15 @@ export default function App() {
             setCurrentUser(user);
             setAuthSuccessMessage(null);
             showToast(`Welcome back, ${user.name}!`);
-            if (user.role === 'Admin') {
+
+            const params = new URLSearchParams(window.location.search);
+            const returnTo = params.get('return_to');
+            const hasOrderTrack = params.get('tab') === 'orders' || params.has('order');
+
+            if (user.role === 'Admin' && !hasOrderTrack && returnTo !== 'profile') {
               navigateTo('dashboard');
+            } else if (hasOrderTrack || returnTo === 'profile') {
+              navigateTo('profile');
             } else {
               navigateTo('storefront');
             }

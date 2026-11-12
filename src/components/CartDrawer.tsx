@@ -193,24 +193,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     return '';
   })();
 
-  // Automatically autofill contactNumber when a Custom Cake Design phone number is available
+  // User requested contact number input must be initially blank.
+  // We keep customBookingPhone available if needed, but do not auto-fill contactNumber.
   useEffect(() => {
-    if (!customBookingPhone) return;
-    const digitsOnly = customBookingPhone.replace(/\D/g, '');
-    const normalizedPhone =
-      digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly || customBookingPhone;
-    setContactNumber(normalizedPhone);
-    setContactError('');
-  }, [customBookingPhone]);
-
-  useEffect(() => {
-    if (isOpen && !contactNumber && customBookingPhone) {
-      const digitsOnly = customBookingPhone.replace(/\D/g, '');
-      const normalizedPhone =
-        digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly || customBookingPhone;
-      setContactNumber(normalizedPhone);
-    }
-  }, [isOpen, checkoutStep, contactNumber, customBookingPhone]);
+    // Keep initially blank
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -529,6 +516,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <p className="text-xs sm:text-sm text-on-surface-variant max-w-xs mx-auto leading-relaxed">
                     Your artisanal order <span className="font-bold text-on-surface">{confirmedOrderCode}</span> has been confirmed and scheduled in the patisserie production queue.
                   </p>
+                  {customerEmail && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200/80 text-[11px] font-semibold mt-1">
+                      <span className="material-symbols-outlined text-sm text-purple-600">mark_email_read</span>
+                      <span>Order receipt &amp; details sent to {customerEmail}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 rounded-2xl bg-surface-container text-xs text-left space-y-2.5 text-on-surface-variant border border-outline-variant/40">

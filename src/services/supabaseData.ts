@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { sendOrderPlacedHtmlEmail } from './orderEmailService';
 import {
   CartItem,
   Order,
@@ -1669,7 +1670,29 @@ export const createOrderInDb = async (params: {
     ...existingSharedOrders.filter((o) => o.id !== orderCode),
   ]);
 
-  return { data, orderCode, error };
+  // Dispatch the HTML order confirmation email to the user upon successful placement
+  let emailResult: { sent: boolean; provider?: string; recipient?: string; error?: string } | null = null;
+  if (emailToStore && emailToStore.includes('@') && emailToStore !== '—') {
+    try {
+      emailResult = await sendOrderPlacedHtmlEmail({
+        id: orderCode,
+        customer: safeCustomerName,
+        customerEmail: emailToStore,
+        customerPhone: phoneToStore,
+        cakeItem: cakeSummary || 'Artisanal Cake Order',
+        cakeTypeDetail: newOrderForAdmin.cakeTypeDetail,
+        items: params.items,
+        amount: Number(params.amount.toFixed(2)),
+        date: newOrderForAdmin.date,
+        specialInstructions: combinedInstructions,
+      });
+      console.log('Order confirmation HTML email dispatch result:', emailResult);
+    } catch (e) {
+      console.warn('Could not auto-send order placement HTML email:', e);
+    }
+  }
+
+  return { data, orderCode, error, emailResult };
 };
 
 const syncOrderOverridesToSupabaseSettings = async (
@@ -1738,8 +1761,8 @@ export const sendOrderReadyEmailNotification = async (order: {
       ? `₹${Number(order.amount).toLocaleString('en-IN')}`
       : 'Bespoke Quote';
 
-  const emailSubject = `🎂 Your CakeZone Order ${order.id} is Ready!`;
-  const emailMessage = `Your freshly baked order has been crafted with care by our pastry chefs and is now ready at CakeZone Patisserie. Thank you for celebrating your special moments with us!`;
+  const emailSubject = `Order Ready ${order.id}!`;
+  const emailMessage = `Your freshly baked order has been crafted with care by our pastry chefs and is now ready at CakeZone. Thank you for celebrating your special moments with us!`;
 
   // 1. Automatic EmailJS REST API dispatch (works directly from browser & Vercel)
   const rawServiceId = (
@@ -1766,7 +1789,7 @@ export const sendOrderReadyEmailNotification = async (order: {
       name: order.customer || 'Customer',
       user_name: order.customer || 'Customer',
       customer_name: order.customer || 'Customer',
-      from_name: 'CakeZone Patisserie',
+      from_name: 'CakeZone',
       order_id: order.id,
       cake_item: order.cakeItem,
       cake_details: order.cakeTypeDetail || 'Signature Patisserie Selection',

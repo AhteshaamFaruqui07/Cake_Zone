@@ -50,7 +50,15 @@ export const UserProfile: React.FC<UserProfileProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(false);
-  const [activeProfileTab, setActiveProfileTab] = useState<'details' | 'orders'>('details');
+  const [activeProfileTab, setActiveProfileTab] = useState<'details' | 'orders'>(() => {
+    if (typeof window !== 'undefined') {
+      const search = window.location.search.toLowerCase();
+      if (search.includes('tab=orders') || search.includes('track') || search.includes('order=')) {
+        return 'orders';
+      }
+    }
+    return 'details';
+  });
 
   const fullNameInputRef = useRef<HTMLInputElement>(null);
   const formSectionRef = useRef<HTMLElement>(null);
@@ -198,6 +206,17 @@ export const UserProfile: React.FC<UserProfileProps> = ({
     window.addEventListener('storage', handleStorageSync);
     window.addEventListener('cakezone-orders-updated', handleCustomOrdersUpdated);
     window.addEventListener('focus', handleCustomOrdersUpdated);
+
+    // Auto-switch to Track Orders tab and scroll if navigated via track order link
+    if (typeof window !== 'undefined') {
+      const search = window.location.search.toLowerCase();
+      if (search.includes('tab=orders') || search.includes('track') || search.includes('order=')) {
+        setActiveProfileTab('orders');
+        setTimeout(() => {
+          ordersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }
+    }
 
     return () => {
       supabase.removeChannel(channel);
