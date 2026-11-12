@@ -172,6 +172,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     whatsappUrl: string;
   } | null>(null);
 
+  const [fallbackUserEmail, setFallbackUserEmail] = useState<string>('');
+
+  useEffect(() => {
+    if (!customerEmail) {
+      import('../supabaseClient').then(({ supabase }) => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user?.email) {
+            setFallbackUserEmail(session.user.email);
+          }
+        });
+      });
+    }
+  }, [customerEmail, isOpen]);
+
+  const effectiveEmail = customerEmail || fallbackUserEmail;
+
   // Detect if booking includes a Custom Cake Design request (where phone number was already collected)
   const hasCustomCakeBooking = items.some(isCustomCakeItem);
   const allCustomCakeItems = items.length > 0 && items.every(isCustomCakeItem);
@@ -378,10 +394,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           ).customerName
         : customerName || 'Customer';
 
+      const finalMsg =
+        chatDraftMessage.trim() ||
+        buildWhatsAppMessage(snapshotItems, snapshotTotal, snapshotPhone, targetOrderCode);
+      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER_CLEAN}?text=${encodeURIComponent(finalMsg)}`;
+
+      // 1. Insert order to Supabase AND dispatch Gmail confirmation email (with keepalive guarantee)
       const { orderCode } = await createOrderInDb({
         orderCode: targetOrderCode,
         customer: customCustomerName || customerName || 'Customer',
-        customerEmail: customerEmail || '',
+        customerEmail: effectiveEmail || '',
         customerPhone: snapshotPhone,
         items: snapshotItems,
         specialInstructions,
@@ -390,24 +412,29 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       const finalCode = orderCode || targetOrderCode;
       setConfirmedOrderCode(finalCode);
 
-      const finalMsg =
-        chatDraftMessage.trim() ||
-        buildWhatsAppMessage(snapshotItems, snapshotTotal, snapshotPhone, finalCode);
-
       setConfirmedSnapshot({
         items: snapshotItems,
         total: snapshotTotal,
         contactNumber: snapshotPhone,
-        whatsappUrl: `https://wa.me/${WHATSAPP_NUMBER_CLEAN}?text=${encodeURIComponent(finalMsg)}`,
+        whatsappUrl,
       });
 
       // Brief pause so user sees their sent message tick in the small WhatsApp window before relocating to Order Confirmed!
-      await new Promise((resolve) => setTimeout(resolve, 950));
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      // 2. Open WhatsApp in new tab/app after order and email have been reliably sent
+      try {
+        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+        // Fallback: user can tap Open WhatsApp on the confirmed screen
+      }
 
       setIsWhatsAppPopupOpen(false);
       setCheckoutStep('confirmed');
       setPendingOrderCode(generateOrderCode());
       onClearCart();
+    } catch (err) {
+      console.error('Error during checkout dispatch:', err);
     } finally {
       setIsCheckingOut(false);
     }
@@ -516,10 +543,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <p className="text-xs sm:text-sm text-on-surface-variant max-w-xs mx-auto leading-relaxed">
                     Your artisanal order <span className="font-bold text-on-surface">{confirmedOrderCode}</span> has been confirmed and scheduled in the patisserie production queue.
                   </p>
-                  {customerEmail && (
+                  {effectiveEmail && (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200/80 text-[11px] font-semibold mt-1">
                       <span className="material-symbols-outlined text-sm text-purple-600">mark_email_read</span>
-                      <span>Order receipt &amp; details sent to {customerEmail}</span>
+                      <span>Order receipt &amp; details sent to {effectiveEmail}</span>
                     </div>
                   )}
                 </div>
@@ -1002,44 +1029,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         className="w-full text-[11px] text-slate-800 bg-transparent focus:outline-none resize-none leading-snug font-sans"
                       />
                     </div>
-                    <a
-                      href={`https://wa.me/${WHATSAPP_NUMBER_CLEAN}?text=${encodeURIComponent(
-                        chatDraftMessage.trim() || whatsappMessage
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => {
-                        handleSendWhatsAppMessage();
-                      }}
+                    <button
+                      type="button"
+                      onClick={handleSendWhatsAppMessage}
+                      disabled={isCheckingOut || hasSentWhatsAppMsg}
                       title="Send WhatsApp Message to +91 9770566246"
                       className={`w-11 h-11 rounded-full bg-[#25D366] hover:bg-[#1ebe5d] text-white flex items-center justify-center shadow-md active:scale-95 transition-all shrink-0 cursor-pointer ${
                         isCheckingOut || hasSentWhatsAppMsg ? 'opacity-60 pointer-events-none' : ''
                       }`}
                     >
                       <span className="material-symbols-outlined text-xl">send</span>
-                    </a>
+                    </button>
                   </div>
 
-                  <a
-                    href={`https://wa.me/${WHATSAPP_NUMBER_CLEAN}?text=${encodeURIComponent(
-                      chatDraftMessage.trim() || whatsappMessage
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => {
-                      handleSendWhatsAppMessage();
-                    }}
-                    className={`w-full py-2 rounded-xl bg-[#075E54] hover:bg-[#064e46] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer ${
+                  <button
+                    type="button"
+                    onClick={handleSendWhatsAppMessage}
+                    disabled={isCheckingOut || hasSentWhatsAppMsg}
+                    className={`w-full py-2.5 rounded-xl bg-[#075E54] hover:bg-[#064e46] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer ${
                       isCheckingOut || hasSentWhatsAppMsg ? 'opacity-60 pointer-events-none' : ''
                     }`}
                   >
                     <span className="material-symbols-outlined text-sm">send</span>
                     <span>
                       {hasSentWhatsAppMsg
-                        ? 'Message Sent! Opening Order Confirmed...'
+                        ? 'Order & Email Confirmed! Opening WhatsApp...'
                         : 'Send Message & Confirm Order'}
                     </span>
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>

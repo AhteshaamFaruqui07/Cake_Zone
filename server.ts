@@ -299,17 +299,41 @@ app.post('/api/send-order-email', async (req, res) => {
       });
     }
 
+    const appBaseUrl = (serverAppOrigin || process.env.APP_URL || '').replace(/\/+$/, '');
+    const trackOrderUrl = `${appBaseUrl}/profile?tab=orders&order=${encodeURIComponent(normalizedId)}`;
+
+    const effectiveHtml =
+      html ||
+      buildServerOrderConfirmationHtml({
+        customerName: customerName || 'Valued Customer',
+        orderId: normalizedId,
+        placedTime:
+          placedTime ||
+          new Date().toLocaleString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          }),
+        cakeItem: cakeItem || 'Artisanal Cake',
+        cakeDetails: cakeDetails || cakeItem || '',
+        orderAmount: amount || 'Bespoke Quote',
+        trackOrderUrl,
+      });
+
     const mailOptions = {
       from: `"CakeZone" <${senderEmail}>`,
       to,
       subject: `🎂 Order Confirmed: ${orderId} - CakeZone`,
-      html: html,
-      text: `Dear ${customerName || 'Customer'},\n\nThank you for placing the order and further order details are:\nOrder Code: ${orderId}\nPlaced On: ${placedTime || 'Today'}\nItem: ${cakeItem}\nTotal: ${amount}\n\nYour order has been placed into our kitchen queue.\n\nCakeZone`,
+      html: effectiveHtml,
+      text: `Dear ${customerName || 'Customer'},\n\nThank you for placing the order and further order details are:\nOrder Code: ${orderId}\nPlaced On: ${placedTime || 'Today'}\nItem: ${cakeItem}\nTotal: ${amount}\n\nTrack your live order status here: ${trackOrderUrl}\n\nCakeZone`,
     };
 
     const info = await transporter.sendMail(mailOptions);
     if (normalizedId) processedOrderIds.add(normalizedId);
-    console.log('Gmail sent successfully via API:', info.messageId);
+    console.log(`[CakeZone Server] Gmail sent successfully via API for ${normalizedId}: ${info.messageId}`);
 
     return res.json({ success: true, messageId: info.messageId });
   } catch (error: any) {

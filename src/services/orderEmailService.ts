@@ -231,6 +231,7 @@ export const sendOrderPlacedHtmlEmail = async (order: {
     const res = await fetch('/api/send-order-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      keepalive: true, // CRITICAL FOR MOBILE: ensures browser delivers request even if tab is backgrounded
       body: JSON.stringify({
         to: recipient,
         customerName: order.customer || 'Customer',
@@ -245,11 +246,14 @@ export const sendOrderPlacedHtmlEmail = async (order: {
 
     if (res.ok) {
       const data = await res.json();
+      console.log('Gmail SMTP order confirmation email dispatched successfully:', data);
       return {
         sent: true,
         provider: 'Google Gmail (SMTP App Password)',
         recipient,
       };
+    } else {
+      console.warn('Backend /api/send-order-email returned non-ok status:', res.status);
     }
   } catch (err) {
     console.warn('Backend /api/send-order-email network call error:', err);
