@@ -1571,31 +1571,7 @@ export const createOrderInDb = async (params: {
     })
     .join(' | ');
   const safeCustomerName = sanitizeTextInput(params.customer, 120) || 'Customer';
-
-  // Thoroughly resolve customer email from params, session, user metadata, or profiles table
-  let rawCandidateEmail =
-    params.customerEmail ||
-    session?.user?.email ||
-    session?.user?.user_metadata?.email ||
-    session?.user?.user_metadata?.profile_email ||
-    '';
-
-  if ((!rawCandidateEmail || !rawCandidateEmail.includes('@')) && userId) {
-    try {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (prof?.email && prof.email.includes('@')) {
-        rawCandidateEmail = prof.email;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const emailToStore = sanitizeTextInput(rawCandidateEmail, 160);
+  const emailToStore = sanitizeTextInput(params.customerEmail || session?.user?.email || '', 160);
   const phoneToStore = sanitizeTextInput(params.customerPhone || '', 32);
   const safeSpecialInstructions = sanitizeTextInput(params.specialInstructions || '', 500);
   const createdAtIso = new Date().toISOString();
@@ -1695,35 +1671,21 @@ export const createOrderInDb = async (params: {
   ]);
 
   // Dispatch the HTML order confirmation email to the user upon successful placement
-  // Awaiting via Promise.race guarantees dispatch is executed and verified before mobile tab changes
   let emailResult: { sent: boolean; provider?: string; recipient?: string; error?: string } | null = null;
   if (emailToStore && emailToStore.includes('@') && emailToStore !== '—') {
     try {
-      emailResult = await Promise.race([
-        sendOrderPlacedHtmlEmail({
-          id: orderCode,
-          customer: safeCustomerName,
-          customerEmail: emailToStore,
-          customerPhone: phoneToStore,
-          cakeItem: cakeSummary || 'Artisanal Cake Order',
-          cakeTypeDetail: newOrderForAdmin.cakeTypeDetail,
-          items: params.items,
-          amount: Number(params.amount.toFixed(2)),
-          date: newOrderForAdmin.date,
-          specialInstructions: combinedInstructions,
-        }),
-        new Promise<{ sent: boolean; provider: string; recipient: string }>((resolve) =>
-          setTimeout(
-            () =>
-              resolve({
-                sent: true,
-                provider: 'Google Gmail (SMTP Keepalive)',
-                recipient: emailToStore,
-              }),
-            3500
-          )
-        ),
-      ]);
+      emailResult = await sendOrderPlacedHtmlEmail({
+        id: orderCode,
+        customer: safeCustomerName,
+        customerEmail: emailToStore,
+        customerPhone: phoneToStore,
+        cakeItem: cakeSummary || 'Artisanal Cake Order',
+        cakeTypeDetail: newOrderForAdmin.cakeTypeDetail,
+        items: params.items,
+        amount: Number(params.amount.toFixed(2)),
+        date: newOrderForAdmin.date,
+        specialInstructions: combinedInstructions,
+      });
       console.log('Order confirmation HTML email dispatch result:', emailResult);
     } catch (e) {
       console.warn('Could not auto-send order placement HTML email:', e);
