@@ -17,112 +17,67 @@ export const buildOrderConfirmationHtml = (params: {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Your CakeZone Order is Confirmed</title>
+  <title>Order Confirmed ${params.orderId} - CakeZone</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #fbf6f1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e1b26;">
-  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #fbf6f1; padding: 30px 10px;">
+<body style="margin: 0; padding: 0; background-color: #fdf6ee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #2b211e;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #fdf6ee; padding: 28px 12px;">
     <tr>
       <td align="center">
-        <!-- Main Card Container -->
-        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #ebdcd0; box-shadow: 0 10px 25px rgba(85, 52, 153, 0.08);">
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #ffffff; border-radius: 14px; overflow: hidden; border: 1px solid #f0e2d5; box-shadow: 0 8px 24px rgba(93, 52, 175, 0.08);">
           
-          <!-- Top Luxury Accent Stripe -->
+          <!-- Solid Purple Brand Header -->
           <tr>
-            <td style="height: 6px; background: linear-gradient(90deg, #6841b8, #db2777, #f59e0b);"></td>
-          </tr>
-
-          <!-- Header / Brand Logo & Title -->
-          <tr>
-            <td align="center" style="padding: 36px 30px 20px 30px; text-align: center;">
-              <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: #4f378a; letter-spacing: -0.5px;">CakeZone</h1>
-              <p style="margin: 4px 0 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #8e7c9f; font-weight: 600;">Artisanal Luxury Patisserie</p>
+            <td align="center" style="background-color: #5d34af; padding: 32px 24px; text-align: center;">
+              <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.3px;">CakeZone</h1>
+              <p style="margin: 8px 0 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2.5px; color: #ece4ff; font-weight: 500;">MADE WITH LOVE, BAKED WITH PASSION</p>
             </td>
           </tr>
 
-          <!-- Success Badge & Main Headline -->
+          <!-- Greeting & Confirmation Message -->
           <tr>
-            <td align="center" style="padding: 0 30px;">
-              <table role="presentation" border="0" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td align="center" style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 50px; padding: 6px 16px;">
-                    <span style="color: #047857; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">✓ Order Placed Successfully</span>
-                  </td>
-                </tr>
-              </table>
-              <h2 style="margin: 16px 0 8px 0; font-size: 22px; font-weight: 800; color: #1e1b26; letter-spacing: -0.3px;">Thank you for your order!</h2>
-              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #5c5568;">
-                Dear <strong>${params.customerName}</strong>, we’re thrilled to bake for you! Your order has been placed into our master chefs’ kitchen queue. Further details are provided below:
+            <td style="padding: 30px 30px 10px 30px; text-align: left;">
+              <h2 style="margin: 0 0 14px 0; font-size: 20px; font-weight: 700; color: #5d34af;">
+                Hello ${params.customerName}! &#127874;
+              </h2>
+              <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: 700; color: #2b211e;">
+                Your Order Has Been Placed Successfully!
+              </p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #665c58;">
+                Thank you for choosing CakeZone! We’ve received your order and our pastry chefs have queued it for preparation. Your order details are provided below:
               </p>
             </td>
           </tr>
 
-          <!-- Order Summary Card -->
+          <!-- ORDER SUMMARY Box -->
           <tr>
-            <td style="padding: 24px 30px;">
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #faf7ff; border-radius: 14px; border: 1px solid #ebdffe; padding: 20px;">
+            <td style="padding: 18px 30px 22px 30px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #fffaf5; border: 1px solid #eedfd2; border-radius: 12px; padding: 18px 20px;">
                 <tr>
                   <td>
-                    <!-- Order ID & Date -->
-                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <p style="margin: 0 0 14px 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: #5d34af;">
+                      ORDER SUMMARY
+                    </p>
+                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="font-size: 14px; line-height: 1.6;">
                       <tr>
-                        <td align="left" style="font-size: 12px; font-weight: 700; color: #553499; text-transform: uppercase; letter-spacing: 0.5px;">
-                          Order Code: <span style="font-size: 14px; font-weight: 800; color: #1e1b26;">${params.orderId}</span>
-                        </td>
-                        <td align="right" style="font-size: 12px; color: #7c7289; font-weight: 500;">
-                          ${params.placedTime}
-                        </td>
-                      </tr>
-                    </table>
-
-                    <div style="height: 1px; background-color: #e8dbfc; margin: 14px 0;"></div>
-
-                    <!-- Items Ordered -->
-                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
-                      <tr>
-                        <td style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #826e9c; padding-bottom: 8px;">
-                          Ordered Items
-                        </td>
+                        <td style="padding: 5px 0; color: #665c58; width: 130px; vertical-align: top;"><strong>Order Code:</strong></td>
+                        <td style="padding: 5px 0; color: #1e1b26; font-weight: 700;">${params.orderId}</td>
                       </tr>
                       <tr>
-                        <td style="font-size: 14px; line-height: 1.6; color: #1e1b26; font-weight: 600;">
+                        <td style="padding: 5px 0; color: #665c58; width: 130px; vertical-align: top;"><strong>Date:</strong></td>
+                        <td style="padding: 5px 0; color: #1e1b26;">${params.placedTime}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 5px 0; color: #665c58; width: 130px; vertical-align: top;"><strong>Ordered Items:</strong></td>
+                        <td style="padding: 5px 0; color: #1e1b26; font-weight: 600;">
                           ${params.cakeItem}
+                          <div style="margin-top: 4px; font-size: 12px; font-weight: 400; color: #726882;">${params.cakeDetails}</div>
                         </td>
                       </tr>
                       <tr>
-                        <td style="font-size: 12px; line-height: 1.5; color: #726882; padding-top: 4px;">
-                          ${params.cakeDetails}
-                        </td>
+                        <td style="padding: 10px 0 2px 0; border-top: 1px solid #eedfd2; color: #5d34af; font-weight: 700;">Total Amount:</td>
+                        <td style="padding: 10px 0 2px 0; border-top: 1px solid #eedfd2; color: #5d34af; font-size: 16px; font-weight: 800;">${params.orderAmount}</td>
                       </tr>
                     </table>
-
-                    <div style="height: 1px; background-color: #e8dbfc; margin: 14px 0;"></div>
-
-                    <!-- Total Amount -->
-                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
-                      <tr>
-                        <td align="left" style="font-size: 13px; font-weight: 600; color: #5c5568;">
-                          Total Order Amount
-                        </td>
-                        <td align="right" style="font-size: 18px; font-weight: 800; color: #4f378a;">
-                          ${params.orderAmount}
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Delivery / Pick-Up Information -->
-          <tr>
-            <td style="padding: 0 30px 24px 30px;">
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border: 1px dashed #d7cde5; border-radius: 12px; padding: 14px 18px;">
-                <tr>
-                  <td style="font-size: 12px; line-height: 1.6; color: #5c5568;">
-                    📍 <strong>Patisserie Location:</strong> 2488 Behind Dr Taqi Raza, Ghantaghar, Jabalpur<br />
-                    ⏱️ <strong>Estimated Preparation:</strong> Scheduled for Tomorrow by 2:00 PM<br />
-                    💬 <strong>WhatsApp Concierge:</strong> +91 93997 36018
                   </td>
                 </tr>
               </table>
@@ -131,12 +86,12 @@ export const buildOrderConfirmationHtml = (params: {
 
           <!-- Track Order Button -->
           <tr>
-            <td align="center" style="padding: 0 30px 32px 30px;">
+            <td align="center" style="padding: 0 30px 28px 30px;">
               <table role="presentation" border="0" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td align="center" style="background-color: #4f378a; border-radius: 12px;">
-                    <a href="${params.trackOrderUrl}" target="_blank" style="display: inline-block; padding: 14px 30px; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 12px; letter-spacing: 0.2px;">
-                      Track Your Live Order Status →
+                  <td align="center" style="background-color: #5d34af; border-radius: 10px;">
+                    <a href="${params.trackOrderUrl}" target="_blank" style="display: inline-block; padding: 13px 28px; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 10px;">
+                      Track Your Live Order Status &rarr;
                     </a>
                   </td>
                 </tr>
@@ -146,11 +101,10 @@ export const buildOrderConfirmationHtml = (params: {
 
           <!-- Footer -->
           <tr>
-            <td align="center" style="background-color: #060408; padding: 24px 30px; text-align: center;">
-              <p style="margin: 0; font-size: 13px; font-weight: 700; color: #ffffff;">Sweet Moments, Always. ♡</p>
-              <p style="margin: 6px 0 0 0; font-size: 11px; color: #9c92a8; line-height: 1.5;">
-                CakeZone • Jabalpur, MP<br />
-                Questions? Reply to this email or reach us on WhatsApp at +91 93997 36018
+            <td style="background-color: #faf4ed; border-top: 1px solid #efe3d7; padding: 18px 30px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #665c58; line-height: 1.6;">
+                <strong>CakeZone Patisserie</strong> &bull; 2488 Behind Dr Taqi Raza, Ghantaghar, Jabalpur<br />
+                WhatsApp Concierge: +91 93997 36018
               </p>
             </td>
           </tr>
@@ -244,6 +198,98 @@ export const sendOrderPlacedHtmlEmail = async (order: {
     trackOrderUrl,
   });
 
+  // 1. Primary: Dedicated Order Confirmation EmailJS service (completely isolated from Order Ready EmailJS)
+  const orderConfirmServiceId = (
+    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_SERVICE_ID || 'service_ql0btdp'
+  ).trim();
+  const orderConfirmTemplateId = (
+    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_TEMPLATE_ID || '1z3cops'
+  ).trim();
+  const orderConfirmPublicKey = (
+    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_PUBLIC_KEY || 'B5jxc8GuCM1sCKj7A'
+  ).trim();
+
+  if (orderConfirmServiceId && orderConfirmTemplateId && orderConfirmPublicKey) {
+    const emailJsSubject = `Order Confirmed ${order.id} - CakeZone`;
+    const emailJsMessage = `Order Code: ${order.id}\nDate: ${placedTimeFormatted}\nOrdered Items: ${order.cakeItem}\nTotal: ${formattedAmount}\nTrack Order: ${trackOrderUrl}`;
+    const candidateTemplateIds = Array.from(
+      new Set(
+        orderConfirmTemplateId.startsWith('template_')
+          ? [orderConfirmTemplateId, orderConfirmTemplateId.replace(/^template_/, '')]
+          : [orderConfirmTemplateId, `template_${orderConfirmTemplateId}`]
+      )
+    );
+
+    const templateParams = {
+      to_email: recipient,
+      email: recipient,
+      user_email: recipient,
+      customer_email: recipient,
+      recipient_email: recipient,
+      recipient: recipient,
+      to: recipient,
+      reply_to: recipient,
+      to_name: order.customer || 'Customer',
+      name: order.customer || 'Customer',
+      user_name: order.customer || 'Customer',
+      customer_name: order.customer || 'Customer',
+      from_name: 'CakeZone',
+      order_id: order.id,
+      date: placedTimeFormatted,
+      placed_time: placedTimeFormatted,
+      cake_item: order.cakeItem,
+      cake_details: order.cakeTypeDetail || itemsDetailText,
+      ordered_items: itemsDetailText.replace(/<br\s*\/?>/gi, ', '),
+      order_amount: formattedAmount,
+      track_order_url: trackOrderUrl,
+      cost: {
+        shipping: '₹0',
+        tax: 'Included',
+        total: formattedAmount,
+      },
+      orders:
+        order.items && order.items.length > 0
+          ? order.items.map((i) => ({
+              name: i.name,
+              units: i.quantity,
+              price: `₹${(i.price * i.quantity).toLocaleString('en-IN')}`,
+            }))
+          : [
+              {
+                name: order.cakeItem,
+                units: 1,
+                price: formattedAmount,
+              },
+            ],
+      order_status: 'Confirmed',
+      subject: emailJsSubject,
+      message: emailJsMessage,
+      html_message: htmlContent,
+    };
+
+    for (const templateId of candidateTemplateIds) {
+      try {
+        const emailJsRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_id: orderConfirmServiceId,
+            template_id: templateId,
+            user_id: orderConfirmPublicKey,
+            template_params: templateParams,
+          }),
+        });
+
+        if (emailJsRes.ok) {
+          return { sent: true, provider: 'EmailJS (Order Confirmation)', recipient };
+        }
+      } catch {
+        // Try next candidate template ID format
+      }
+    }
+  }
+
+  // 2. Fallback: Dispatch to backend /api/send-order-email (same-origin first, then hosted origins for mobile app shells)
   const payload = {
     to: recipient,
     customerName: order.customer || 'Customer',
@@ -255,7 +301,6 @@ export const sendOrderPlacedHtmlEmail = async (order: {
     html: htmlContent,
   };
 
-  // 1. Primary: Dispatch to backend /api/send-order-email (same-origin first, then hosted origins for mobile app shells)
   const candidateEndpoints = Array.from(
     new Set(
       [
@@ -289,99 +334,9 @@ export const sendOrderPlacedHtmlEmail = async (order: {
     }
   }
 
-  // 2. Secondary fallback via EmailJS REST API with full template parameter coverage
-  const rawServiceId = (import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_ui38l76').trim();
-  const rawTemplateId = (import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '1h1c1bt').trim();
-  const emailJsPublicKey = (import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'BGQzEiGCJqRY1sYIS').trim();
-
-  if (emailJsPublicKey) {
-    const emailJsSubject = `Order Confirmed ${order.id} - CakeZone`;
-    const emailJsMessage = `Order Code: ${order.id}\nDate: ${placedTimeFormatted}\nOrdered Items: ${order.cakeItem}\nTotal: ${formattedAmount}\nTrack Order: ${trackOrderUrl}`;
-    const candidateServiceIds = Array.from(
-      new Set([rawServiceId, 'default_service', 'service_6iqk1xs'].filter(Boolean))
-    );
-    const candidateTemplateIds = Array.from(
-      new Set([
-        ...(rawTemplateId.startsWith('template_')
-          ? [rawTemplateId, rawTemplateId.replace(/^template_/, '')]
-          : [rawTemplateId, `template_${rawTemplateId}`]),
-        'template_50iyj49',
-      ])
-    );
-
-    const templateParams = {
-      to_email: recipient,
-      email: recipient,
-      user_email: recipient,
-      customer_email: recipient,
-      recipient_email: recipient,
-      recipient: recipient,
-      to: recipient,
-      reply_to: recipient,
-      to_name: order.customer || 'Customer',
-      name: order.customer || 'Customer',
-      user_name: order.customer || 'Customer',
-      customer_name: order.customer || 'Customer',
-      from_name: 'CakeZone',
-      order_id: order.id,
-      date: placedTimeFormatted,
-      placed_time: placedTimeFormatted,
-      cake_item: order.cakeItem,
-      cake_details: order.cakeTypeDetail || itemsDetailText,
-      ordered_items: itemsDetailText.replace(/<br\s*\/?>/gi, ', '),
-      order_amount: formattedAmount,
-      cost: {
-        shipping: '₹0',
-        tax: 'Included',
-        total: formattedAmount,
-      },
-      orders:
-        order.items && order.items.length > 0
-          ? order.items.map((i) => ({
-              name: i.name,
-              units: i.quantity,
-              price: `₹${(i.price * i.quantity).toLocaleString('en-IN')}`,
-            }))
-          : [
-              {
-                name: order.cakeItem,
-                units: 1,
-                price: formattedAmount,
-              },
-            ],
-      order_status: 'Confirmed',
-      subject: emailJsSubject,
-      message: emailJsMessage,
-      html_message: htmlContent,
-    };
-
-    for (const serviceId of candidateServiceIds) {
-      for (const templateId of candidateTemplateIds) {
-        try {
-          const emailJsRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              service_id: serviceId,
-              template_id: templateId,
-              user_id: emailJsPublicKey,
-              template_params: templateParams,
-            }),
-          });
-
-          if (emailJsRes.ok) {
-            return { sent: true, provider: 'EmailJS (Fallback)', recipient };
-          }
-        } catch {
-          // Try next combination
-        }
-      }
-    }
-  }
-
   return {
     sent: false,
-    provider: 'Google Gmail SMTP',
+    provider: 'EmailJS (Order Confirmation)',
     recipient,
     error: 'Failed to send confirmation email',
   };
