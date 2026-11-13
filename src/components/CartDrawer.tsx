@@ -165,12 +165,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [pendingOrderCode, setPendingOrderCode] = useState<string>(() => generateOrderCode());
   const [confirmedOrderCode, setConfirmedOrderCode] = useState('#CZ-8493');
+  const [placedOrderForBag, setPlacedOrderForBag] = useState<{
+    orderCode: string;
+    bagSignature: string;
+  } | null>(null);
   const [confirmedSnapshot, setConfirmedSnapshot] = useState<{
     items: CartItem[];
     total: number;
     contactNumber: string;
     whatsappUrl: string;
   } | null>(null);
+
+  const currentBagSignature = items
+    .map((i) => `${i.id}:${i.quantity}:${i.details || ''}`)
+    .join('|');
+
+  useEffect(() => {
+    if (placedOrderForBag && placedOrderForBag.bagSignature !== currentBagSignature) {
+      setPlacedOrderForBag(null);
+    }
+  }, [currentBagSignature, placedOrderForBag]);
 
   // Detect if booking includes a Custom Cake Design request (where phone number was already collected)
   const hasCustomCakeBooking = items.some(isCustomCakeItem);
@@ -339,8 +353,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setCheckoutStep('whatsapp');
   };
 
-  // Step 2 -> Open Small WhatsApp Window (after checking autofilled or entered contact number)
-  const handleOpenWhatsAppWindow = () => {
+  // Step 2 -> Immediately create order & send confirmation email, then open WhatsApp Window
+  const handleOpenWhatsAppWindow = async () => {
     if (!contactNumber.trim()) {
       setContactError('Contact number is mandatory to proceed with your bespoke order.');
       return;
@@ -351,8 +365,59 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       );
       return;
     }
+    if (isCheckingOut) return;
     setContactError('');
-    const prefilled = buildWhatsAppMessage(items, total, effectivePhone, pendingOrderCode);
+
+    let activeOrderCode = pendingOrderCode;
+
+    // Place the order & send email (Order Code, Date, Ordered Items) right when "Place Order via WhatsApp" is clicked,
+    // before any external WhatsApp app switch can suspend the mobile browser.
+    if (!placedOrderForBag || placedOrderForBag.bagSignature !== currentBagSignature) {
+      setIsCheckingOut(true);
+      try {
+        const snapshotItems = [...items];
+        const snapshotTotal = total;
+        const snapshotPhone = effectivePhone;
+        const customCustomerName = snapshotItems.some(isCustomCakeItem)
+          ? parseCustomCakeFields(
+              snapshotItems.find(isCustomCakeItem)!,
+              customerName,
+              snapshotPhone
+            ).customerName
+          : customerName || 'Customer';
+
+        const { orderCode, data, error } = await createOrderInDb({
+          orderCode: pendingOrderCode,
+          customer: customCustomerName || customerName || 'Customer',
+          customerEmail: customerEmail || '',
+          customerPhone: snapshotPhone,
+          items: snapshotItems,
+          specialInstructions,
+          amount: snapshotTotal,
+        });
+
+        if (error && !data && !orderCode) {
+          setContactError(error.message || 'Unable to place order right now. Please try again.');
+          return;
+        }
+
+        activeOrderCode = orderCode || pendingOrderCode;
+        setConfirmedOrderCode(activeOrderCode);
+        setPlacedOrderForBag({
+          orderCode: activeOrderCode,
+          bagSignature: currentBagSignature,
+        });
+      } catch (err: any) {
+        setContactError(err?.message || 'Unable to place order right now. Please try again.');
+        return;
+      } finally {
+        setIsCheckingOut(false);
+      }
+    } else {
+      activeOrderCode = placedOrderForBag.orderCode;
+    }
+
+    const prefilled = buildWhatsAppMessage(items, total, effectivePhone, activeOrderCode);
     setChatDraftMessage(prefilled);
     setHasSentWhatsAppMsg(false);
     setIsWhatsAppPopupOpen(true);
@@ -365,29 +430,37 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const snapshotItems = [...items];
     const snapshotTotal = total;
     const snapshotPhone = effectivePhone;
-    const targetOrderCode = pendingOrderCode;
+    const alreadyPlaced =
+      placedOrderForBag && placedOrderForBag.bagSignature === currentBagSignature;
+    const targetOrderCode = alreadyPlaced ? placedOrderForBag.orderCode : pendingOrderCode;
+
     setIsCheckingOut(true);
     setHasSentWhatsAppMsg(true);
 
     try {
-      const customCustomerName = snapshotItems.some(isCustomCakeItem)
-        ? parseCustomCakeFields(
-            snapshotItems.find(isCustomCakeItem)!,
-            customerName,
-            snapshotPhone
-          ).customerName
-        : customerName || 'Customer';
+      let finalCode = targetOrderCode;
 
-      const { orderCode } = await createOrderInDb({
-        orderCode: targetOrderCode,
-        customer: customCustomerName || customerName || 'Customer',
-        customerEmail: customerEmail || '',
-        customerPhone: snapshotPhone,
-        items: snapshotItems,
-        specialInstructions,
-        amount: snapshotTotal,
-      });
-      const finalCode = orderCode || targetOrderCode;
+      if (!alreadyPlaced) {
+        const customCustomerName = snapshotItems.some(isCustomCakeItem)
+          ? parseCustomCakeFields(
+              snapshotItems.find(isCustomCakeItem)!,
+              customerName,
+              snapshotPhone
+            ).customerName
+          : customerName || 'Customer';
+
+        const { orderCode } = await createOrderInDb({
+          orderCode: targetOrderCode,
+          customer: customCustomerName || customerName || 'Customer',
+          customerEmail: customerEmail || '',
+          customerPhone: snapshotPhone,
+          items: snapshotItems,
+          specialInstructions,
+          amount: snapshotTotal,
+        });
+        finalCode = orderCode || targetOrderCode;
+      }
+
       setConfirmedOrderCode(finalCode);
 
       const finalMsg =
@@ -406,6 +479,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
       setIsWhatsAppPopupOpen(false);
       setCheckoutStep('confirmed');
+      setPlacedOrderForBag(null);
       setPendingOrderCode(generateOrderCode());
       onClearCart();
     } finally {
@@ -416,6 +490,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const handleFinish = () => {
     setCheckoutStep('bag');
     setConfirmedSnapshot(null);
+    setPlacedOrderForBag(null);
     setSpecialInstructions('');
     setContactError('');
     setPendingOrderCode(generateOrderCode());
@@ -870,10 +945,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleOpenWhatsAppWindow}
-                className="w-full py-3.5 px-4 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-headline font-bold rounded-xl shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isCheckingOut}
+                className={`w-full py-3.5 px-4 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-headline font-bold rounded-xl shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer ${
+                  isCheckingOut ? 'opacity-75 pointer-events-none' : ''
+                }`}
               >
-                <span className="material-symbols-outlined text-lg">chat</span>
-                <span>Place Order via WhatsApp</span>
+                <span className={`material-symbols-outlined text-lg ${isCheckingOut ? 'animate-spin' : ''}`}>
+                  {isCheckingOut ? 'progress_activity' : 'chat'}
+                </span>
+                <span>
+                  {isCheckingOut ? 'Placing Order & Sending Email...' : 'Place Order via WhatsApp'}
+                </span>
               </button>
 
               <button
