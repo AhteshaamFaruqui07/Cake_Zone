@@ -1,4 +1,5 @@
 import { CartItem } from '../types';
+import { supabase } from '../supabaseClient';
 
 /**
  * Returns the exact responsive HTML template for the order confirmation email.
@@ -133,11 +134,27 @@ export const sendOrderPlacedHtmlEmail = async (order: {
   date?: string;
   specialInstructions?: string;
 }): Promise<{ sent: boolean; provider: string; recipient?: string; error?: string }> => {
-  const recipient = (order.customerEmail || '').trim();
+  let recipient = (order.customerEmail || '').trim();
+  if (!recipient || !recipient.includes('@') || recipient === '—') {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const sessionEmail = (
+        session?.user?.email ||
+        session?.user?.user_metadata?.email ||
+        session?.user?.user_metadata?.profile_email ||
+        ''
+      ).trim();
+      if (sessionEmail && sessionEmail.includes('@')) {
+        recipient = sessionEmail;
+      }
+    } catch {
+      // Ignore session lookup fallback error
+    }
+  }
   if (!recipient || !recipient.includes('@') || recipient === '—') {
     return {
       sent: false,
-      provider: 'Gmail SMTP',
+      provider: 'EmailJS (Order Confirmation)',
       error: 'No valid customer email found for this order',
     };
   }
@@ -198,15 +215,59 @@ export const sendOrderPlacedHtmlEmail = async (order: {
     trackOrderUrl,
   });
 
-  // 1. Primary: Dedicated Order Confirmation EmailJS service (completely isolated from Order Ready EmailJS)
+  let lastEmailError = '';
+
+  const payload = {
+    to: recipient,
+    customerName: order.customer || 'Customer',
+    orderId: order.id,
+    cakeItem: order.cakeItem,
+    cakeDetails: order.cakeTypeDetail || itemsDetailText,
+    amount: formattedAmount,
+    placedTime: placedTimeFormatted,
+    html: htmlContent,
+  };
+
+  // 1. Primary on full-stack host: same-origin /api/send-order-email (Gmail SMTP)
+  // Zero CORS preflight & keepalive ensures instant reliable delivery to ANY customer email (e.g. xyz@gmail.com) on mobile & desktop.
+  if (isHostedHttpOrigin) {
+    try {
+      const res = await fetch('/api/send-order-email', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json().catch(() => null);
+        if (data?.success === true && !data?.simulated && !data?.error) {
+          return {
+            sent: true,
+            provider: 'Google Gmail (SMTP App Password)',
+            recipient,
+          };
+        }
+        if (data?.error) {
+          lastEmailError = data.error;
+        }
+      }
+    } catch (err: any) {
+      lastEmailError = err?.message || 'Same-origin SMTP endpoint unavailable';
+      console.warn('Same-origin /api/send-order-email error, falling back:', err);
+    }
+  }
+
+  // 2. Fallback: Dedicated Order Confirmation EmailJS service (completely isolated from Order Ready EmailJS)
   const orderConfirmServiceId = (
     import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_SERVICE_ID || 'service_ql0btdp'
   ).trim();
   const orderConfirmTemplateId = (
-    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_TEMPLATE_ID || '1z3cops'
+    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_TEMPLATE_ID || 'template_c9jof38'
   ).trim();
   const orderConfirmPublicKey = (
-    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_PUBLIC_KEY || 'B5jxc8GuCM1sCKj7A'
+    import.meta.env.VITE_ORDER_CONFIRM_EMAILJS_PUBLIC_KEY || 'YIjZW3Rd49xZIzWtq'
   ).trim();
 
   if (orderConfirmServiceId && orderConfirmTemplateId && orderConfirmPublicKey) {
@@ -228,6 +289,9 @@ export const sendOrderPlacedHtmlEmail = async (order: {
       recipient_email: recipient,
       recipient: recipient,
       to: recipient,
+      toEmail: recipient,
+      recipientEmail: recipient,
+      customerEmail: recipient,
       reply_to: recipient,
       to_name: order.customer || 'Customer',
       name: order.customer || 'Customer',
@@ -238,8 +302,8 @@ export const sendOrderPlacedHtmlEmail = async (order: {
       date: placedTimeFormatted,
       placed_time: placedTimeFormatted,
       cake_item: order.cakeItem,
-      cake_details: order.cakeTypeDetail || itemsDetailText,
-      ordered_items: itemsDetailText.replace(/<br\s*\/?>/gi, ', '),
+      cake_details: (order.cakeTypeDetail || itemsDetailText).slice(0, 1200),
+      ordered_items: itemsDetailText.replace(/<br\s*\/?>/gi, ', ').slice(0, 1200),
       order_amount: formattedAmount,
       track_order_url: trackOrderUrl,
       cost: {
@@ -271,6 +335,7 @@ export const sendOrderPlacedHtmlEmail = async (order: {
       try {
         const emailJsRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
           method: 'POST',
+          keepalive: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             service_id: orderConfirmServiceId,
@@ -283,50 +348,47 @@ export const sendOrderPlacedHtmlEmail = async (order: {
         if (emailJsRes.ok) {
           return { sent: true, provider: 'EmailJS (Order Confirmation)', recipient };
         }
-      } catch {
-        // Try next candidate template ID format
+        const errText = await emailJsRes.text().catch(() => `HTTP ${emailJsRes.status}`);
+        lastEmailError = errText || `EmailJS HTTP ${emailJsRes.status}`;
+        console.warn(`EmailJS (${orderConfirmServiceId}/${templateId}) error:`, lastEmailError);
+      } catch (err: any) {
+        lastEmailError = err?.message || 'Network error calling EmailJS';
+        console.warn(`EmailJS (${orderConfirmServiceId}/${templateId}) network error:`, err);
       }
     }
   }
 
-  // 2. Fallback: Dispatch to backend /api/send-order-email (same-origin first, then hosted origins for mobile app shells)
-  const payload = {
-    to: recipient,
-    customerName: order.customer || 'Customer',
-    orderId: order.id,
-    cakeItem: order.cakeItem,
-    cakeDetails: order.cakeTypeDetail || itemsDetailText,
-    amount: formattedAmount,
-    placedTime: placedTimeFormatted,
-    html: htmlContent,
-  };
-
-  const candidateEndpoints = Array.from(
+  // 3. Fallback for mobile app shells: dispatch to hosted backend origins
+  const fallbackEndpoints = Array.from(
     new Set(
       [
-        isHostedHttpOrigin ? '/api/send-order-email' : '',
-        `${hostedFallbackOrigin}/api/send-order-email`,
         `${devFallbackOrigin}/api/send-order-email`,
+        `${hostedFallbackOrigin}/api/send-order-email`,
       ].filter(Boolean)
     )
   );
 
-  for (const endpoint of candidateEndpoints) {
+  for (const endpoint of fallbackEndpoints) {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
+        keepalive: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (!data?.error) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json().catch(() => null);
+        if (data?.success === true && !data?.simulated && !data?.error) {
           return {
             sent: true,
             provider: 'Google Gmail (SMTP App Password)',
             recipient,
           };
+        }
+        if (data?.error) {
+          lastEmailError = data.error;
         }
       }
     } catch (err) {
@@ -336,8 +398,8 @@ export const sendOrderPlacedHtmlEmail = async (order: {
 
   return {
     sent: false,
-    provider: 'EmailJS (Order Confirmation)',
+    provider: 'Google Gmail (SMTP App Password)',
     recipient,
-    error: 'Failed to send confirmation email',
+    error: lastEmailError || 'Failed to send confirmation email',
   };
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem } from '../types';
 import { createOrderInDb } from '../services/supabaseData';
+import { sendOrderPlacedHtmlEmail } from '../services/orderEmailService';
 import { LOGO_URL, HERO_CAKE_URL } from '../data/initialData';
 
 interface CartDrawerProps {
@@ -168,7 +169,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [placedOrderForBag, setPlacedOrderForBag] = useState<{
     orderCode: string;
     bagSignature: string;
+    resolvedEmail?: string;
+    resolvedCustomerName?: string;
+    cakeSummary?: string;
+    cakeTypeDetail?: string;
+    orderDate?: string;
+    combinedInstructions?: string;
+    emailSent?: boolean;
     emailSentTo?: string;
+    emailError?: string;
   } | null>(null);
   const [confirmedSnapshot, setConfirmedSnapshot] = useState<{
     items: CartItem[];
@@ -176,6 +185,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     contactNumber: string;
     whatsappUrl: string;
     emailSentTo?: string;
+    emailError?: string;
   } | null>(null);
 
   const currentBagSignature = items
@@ -187,6 +197,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setPlacedOrderForBag(null);
     }
   }, [currentBagSignature, placedOrderForBag]);
+
+  useEffect(() => {
+    setPlacedOrderForBag(null);
+    setConfirmedSnapshot(null);
+    setIsWhatsAppPopupOpen(false);
+    setHasSentWhatsAppMsg(false);
+    setCheckoutStep('bag');
+  }, [customerEmail]);
 
   // Detect if booking includes a Custom Cake Design request (where phone number was already collected)
   const hasCustomCakeBooking = items.some(isCustomCakeItem);
@@ -388,7 +406,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             ).customerName
           : customerName || 'Customer';
 
-        const { orderCode, data, error, emailResult } = await createOrderInDb({
+        const {
+          orderCode,
+          data,
+          error,
+          resolvedEmail,
+          resolvedCustomerName,
+          cakeSummary,
+          cakeTypeDetail,
+          orderDate,
+          combinedInstructions,
+        } = await createOrderInDb({
           orderCode: pendingOrderCode,
           customer: customCustomerName || customerName || 'Customer',
           customerEmail: customerEmail || '',
@@ -396,6 +424,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           items: snapshotItems,
           specialInstructions,
           amount: snapshotTotal,
+          skipEmail: true,
         });
 
         if (error && !data && !orderCode) {
@@ -408,7 +437,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setPlacedOrderForBag({
           orderCode: activeOrderCode,
           bagSignature: currentBagSignature,
-          emailSentTo: emailResult?.recipient || customerEmail || '',
+          resolvedEmail: resolvedEmail || customerEmail || '',
+          resolvedCustomerName: resolvedCustomerName || customCustomerName || customerName || 'Customer',
+          cakeSummary,
+          cakeTypeDetail,
+          orderDate,
+          combinedInstructions,
+          emailSent: false,
         });
       } catch (err: any) {
         setContactError(err?.message || 'Unable to place order right now. Please try again.');
@@ -426,7 +461,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsWhatsAppPopupOpen(true);
   };
 
-  // Send message inside the small WhatsApp window -> Relocate to Order Confirmed!
+  // Send message inside the small WhatsApp window -> Send Order Confirmation email & relocate to Order Confirmed!
   const handleSendWhatsAppMessage = async () => {
     if (isCheckingOut || hasSentWhatsAppMsg) return;
 
@@ -442,6 +477,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     try {
       let finalCode = targetOrderCode;
+      let resolvedEmailSentTo = alreadyPlaced && placedOrderForBag.emailSent ? placedOrderForBag.emailSentTo || '' : '';
+      let resolvedEmailError = alreadyPlaced && placedOrderForBag.emailSent ? placedOrderForBag.emailError : undefined;
 
       if (!alreadyPlaced) {
         const customCustomerName = snapshotItems.some(isCustomCakeItem)
@@ -452,7 +489,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             ).customerName
           : customerName || 'Customer';
 
-        const { orderCode } = await createOrderInDb({
+        const { orderCode, emailResult } = await createOrderInDb({
           orderCode: targetOrderCode,
           customer: customCustomerName || customerName || 'Customer',
           customerEmail: customerEmail || '',
@@ -462,6 +499,29 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           amount: snapshotTotal,
         });
         finalCode = orderCode || targetOrderCode;
+        resolvedEmailSentTo = emailResult?.sent ? emailResult.recipient || customerEmail || '' : '';
+        resolvedEmailError = emailResult && !emailResult.sent ? emailResult.error : undefined;
+      } else if (!placedOrderForBag.emailSent) {
+        const targetEmail = placedOrderForBag.resolvedEmail || customerEmail || '';
+        const cakeFallbackSummary = snapshotItems
+          .map((i) => (i.details ? `${i.quantity}x ${i.name} (${i.details})` : `${i.quantity}x ${i.name}`))
+          .join(' | ');
+
+        const emailResult = await sendOrderPlacedHtmlEmail({
+          id: finalCode,
+          customer: placedOrderForBag.resolvedCustomerName || customerName || 'Customer',
+          customerEmail: targetEmail,
+          customerPhone: snapshotPhone,
+          cakeItem: placedOrderForBag.cakeSummary || cakeFallbackSummary || 'Artisanal Cake Order',
+          cakeTypeDetail: placedOrderForBag.cakeTypeDetail,
+          items: snapshotItems,
+          amount: Number(snapshotTotal.toFixed(2)),
+          date: placedOrderForBag.orderDate,
+          specialInstructions: placedOrderForBag.combinedInstructions || specialInstructions,
+        });
+
+        resolvedEmailSentTo = emailResult?.sent ? emailResult.recipient || targetEmail : '';
+        resolvedEmailError = emailResult && !emailResult.sent ? emailResult.error : undefined;
       }
 
       setConfirmedOrderCode(finalCode);
@@ -475,7 +535,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         total: snapshotTotal,
         contactNumber: snapshotPhone,
         whatsappUrl: `https://wa.me/${WHATSAPP_NUMBER_CLEAN}?text=${encodeURIComponent(finalMsg)}`,
-        emailSentTo: placedOrderForBag?.emailSentTo || customerEmail || '',
+        emailSentTo: resolvedEmailSentTo,
+        emailError: resolvedEmailError,
       });
 
       // Brief pause so user sees their sent message tick in the small WhatsApp window before relocating to Order Confirmed!
@@ -595,15 +656,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <p className="text-xs sm:text-sm text-on-surface-variant max-w-xs mx-auto leading-relaxed">
                     Your artisanal order <span className="font-bold text-on-surface">{confirmedOrderCode}</span> has been confirmed and scheduled in the patisserie production queue.
                   </p>
-                  {(confirmedSnapshot?.emailSentTo || customerEmail) && (
+                  {confirmedSnapshot?.emailSentTo ? (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200/80 text-[11px] font-semibold mt-1">
                       <span className="material-symbols-outlined text-sm text-purple-600">mark_email_read</span>
                       <span>
-                        Order receipt &amp; details sent to{' '}
-                        {confirmedSnapshot?.emailSentTo || customerEmail}
+                        Order receipt &amp; details sent to {confirmedSnapshot.emailSentTo}
                       </span>
                     </div>
-                  )}
+                  ) : confirmedSnapshot?.emailError ? (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold mt-1">
+                      <span className="material-symbols-outlined text-sm text-amber-600">warning</span>
+                      <span>
+                        Order saved, but confirmation email failed: {confirmedSnapshot.emailError}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="p-4 rounded-2xl bg-surface-container text-xs text-left space-y-2.5 text-on-surface-variant border border-outline-variant/40">
@@ -968,7 +1035,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   {isCheckingOut ? 'progress_activity' : 'chat'}
                 </span>
                 <span>
-                  {isCheckingOut ? 'Placing Order & Sending Email...' : 'Place Order via WhatsApp'}
+                  {isCheckingOut ? 'Preparing WhatsApp Order...' : 'Place Order via WhatsApp'}
                 </span>
               </button>
 

@@ -1557,6 +1557,7 @@ export const createOrderInDb = async (params: {
   items: CartItem[];
   specialInstructions?: string;
   amount: number;
+  skipEmail?: boolean;
 }) => {
   const { data: { session } } = await supabase.auth.getSession();
   const userId = session?.user?.id || null;
@@ -1573,8 +1574,8 @@ export const createOrderInDb = async (params: {
   const safeCustomerName = sanitizeTextInput(params.customer, 120) || 'Customer';
 
   let resolvedEmailCandidate =
-    params.customerEmail ||
     session?.user?.email ||
+    params.customerEmail ||
     session?.user?.user_metadata?.email ||
     session?.user?.user_metadata?.profile_email ||
     '';
@@ -1697,9 +1698,9 @@ export const createOrderInDb = async (params: {
     ...existingSharedOrders.filter((o) => o.id !== orderCode),
   ]);
 
-  // Dispatch the HTML order confirmation email to the user upon successful placement
+  // Dispatch the HTML order confirmation email to the user unless deferred to the Send button
   let emailResult: { sent: boolean; provider?: string; recipient?: string; error?: string } | null = null;
-  if (emailToStore && emailToStore.includes('@') && emailToStore !== '—') {
+  if (!params.skipEmail && emailToStore && emailToStore.includes('@') && emailToStore !== '—') {
     try {
       emailResult = await sendOrderPlacedHtmlEmail({
         id: orderCode,
@@ -1719,7 +1720,18 @@ export const createOrderInDb = async (params: {
     }
   }
 
-  return { data, orderCode, error, emailResult };
+  return {
+    data,
+    orderCode,
+    error,
+    emailResult,
+    resolvedEmail: emailToStore,
+    resolvedCustomerName: safeCustomerName,
+    cakeSummary: cakeSummary || 'Artisanal Cake Order',
+    cakeTypeDetail: newOrderForAdmin.cakeTypeDetail,
+    orderDate: newOrderForAdmin.date,
+    combinedInstructions,
+  };
 };
 
 const syncOrderOverridesToSupabaseSettings = async (
