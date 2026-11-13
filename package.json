@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --platform=node --target=node22 --bundle --external:vite --outfile=dist-server/server.js",
-    "start": "node dist-server/server.js",
+    "build": "vite build && esbuild server.ts --platform=node --target=node22 --bundle --external:vite --outfile=dist-server/server.cjs",
+    "start": "node dist-server/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist dist-server",
     "lint": "tsc --noEmit"

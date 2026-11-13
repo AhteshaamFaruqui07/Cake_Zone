@@ -9,7 +9,18 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
+
+// Enable CORS so mobile app WebViews (Capacitor/Android/iOS) and cross-origin previews can call /api/*
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 // Gmail SMTP Transporter using Google Account App Password
 const getGmailTransporter = () => {
@@ -58,7 +69,7 @@ app.post('/api/send-order-email', async (req, res) => {
       to,
       subject: `🎂 Order Confirmed: ${orderId} - CakeZone`,
       html: html,
-      text: `Dear ${customerName || 'Customer'},\n\nThank you for placing the order and further order details are:\nOrder Code: ${orderId}\nPlaced On: ${placedTime || 'Today'}\nItem: ${cakeItem}\nTotal: ${amount}\n\nYour order has been placed into our kitchen queue.\n\nCakeZone`,
+      text: `Dear ${customerName || 'Customer'},\n\nThank you for placing the order and further order details are:\nOrder Code: ${orderId}\nDate: ${placedTime || 'Today'}\nOrdered Items: ${cakeItem}${cakeDetails ? `\nDetails: ${cakeDetails.replace(/<br\s*\/?>/gi, ', ')}` : ''}\nTotal: ${amount}\n\nYour order has been placed into our kitchen queue.\n\nCakeZone`,
     };
 
     const info = await transporter.sendMail(mailOptions);
@@ -82,10 +93,11 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Serve static files in production
-    app.use(express.static(path.resolve(__dirname, 'dist')));
+    // Serve static files in production from project root dist/
+    const distDir = path.resolve(process.cwd(), 'dist');
+    app.use(express.static(distDir));
     app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.resolve(distDir, 'index.html'));
     });
   }
 

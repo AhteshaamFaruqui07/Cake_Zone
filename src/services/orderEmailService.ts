@@ -214,7 +214,25 @@ export const sendOrderPlacedHtmlEmail = async (order: {
           .join('<br />')
       : order.cakeItem;
 
-  const trackOrderUrl = `${window.location.origin}/profile?tab=orders&order=${encodeURIComponent(order.id)}`;
+  const hostedFallbackOrigin =
+    'https://ais-pre-ymv5xcuikan4y3q6b2kfuu-748025275727.asia-northeast1.run.app';
+  const devFallbackOrigin =
+    'https://ais-dev-ymv5xcuikan4y3q6b2kfuu-748025275727.asia-northeast1.run.app';
+
+  const currentOrigin =
+    typeof window !== 'undefined' ? window.location.origin : '';
+  const isHostedHttpOrigin =
+    currentOrigin.startsWith('http://') || currentOrigin.startsWith('https://');
+  const isLocalMobileAppShell =
+    !isHostedHttpOrigin ||
+    currentOrigin.includes('localhost') ||
+    currentOrigin.includes('127.0.0.1');
+
+  const trackBaseOrigin = isLocalMobileAppShell
+    ? hostedFallbackOrigin
+    : currentOrigin;
+
+  const trackOrderUrl = `${trackBaseOrigin}/profile?tab=orders&order=${encodeURIComponent(order.id)}`;
 
   const htmlContent = buildOrderConfirmationHtml({
     customerName: order.customer || 'Valued Customer',
@@ -226,66 +244,138 @@ export const sendOrderPlacedHtmlEmail = async (order: {
     trackOrderUrl,
   });
 
-  // 1. Primary: Dispatch to backend /api/send-order-email (Nodemailer Gmail SMTP with App Password)
-  try {
-    const res = await fetch('/api/send-order-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: recipient,
-        customerName: order.customer || 'Customer',
-        orderId: order.id,
-        cakeItem: order.cakeItem,
-        cakeDetails: order.cakeTypeDetail || itemsDetailText,
-        amount: formattedAmount,
-        placedTime: placedTimeFormatted,
-        html: htmlContent,
-      }),
-    });
+  const payload = {
+    to: recipient,
+    customerName: order.customer || 'Customer',
+    orderId: order.id,
+    cakeItem: order.cakeItem,
+    cakeDetails: order.cakeTypeDetail || itemsDetailText,
+    amount: formattedAmount,
+    placedTime: placedTimeFormatted,
+    html: htmlContent,
+  };
 
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        sent: true,
-        provider: 'Google Gmail (SMTP App Password)',
-        recipient,
-      };
+  // 1. Primary: Dispatch to backend /api/send-order-email (same-origin first, then hosted origins for mobile app shells)
+  const candidateEndpoints = Array.from(
+    new Set(
+      [
+        isHostedHttpOrigin ? '/api/send-order-email' : '',
+        `${hostedFallbackOrigin}/api/send-order-email`,
+        `${devFallbackOrigin}/api/send-order-email`,
+      ].filter(Boolean)
+    )
+  );
+
+  for (const endpoint of candidateEndpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (!data?.error) {
+          return {
+            sent: true,
+            provider: 'Google Gmail (SMTP App Password)',
+            recipient,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(`Email endpoint ${endpoint} call error:`, err);
     }
-  } catch (err) {
-    console.warn('Backend /api/send-order-email network call error:', err);
   }
 
-  // 2. Secondary fallback via EmailJS if server route unavailable
+  // 2. Secondary fallback via EmailJS REST API with full template parameter coverage
   const rawServiceId = (import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_ui38l76').trim();
   const rawTemplateId = (import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '1h1c1bt').trim();
   const emailJsPublicKey = (import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'BGQzEiGCJqRY1sYIS').trim();
 
   if (emailJsPublicKey) {
-    try {
-      const emailJsRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_id: rawServiceId,
-          template_id: rawTemplateId,
-          user_id: emailJsPublicKey,
-          template_params: {
-            to_email: recipient,
-            email: recipient,
-            user_name: order.customer || 'Customer',
-            order_id: order.id,
-            cake_item: order.cakeItem,
-            order_amount: formattedAmount,
-            html_message: htmlContent,
-          },
-        }),
-      });
+    const emailJsSubject = `Order Confirmed ${order.id} - CakeZone`;
+    const emailJsMessage = `Order Code: ${order.id}\nDate: ${placedTimeFormatted}\nOrdered Items: ${order.cakeItem}\nTotal: ${formattedAmount}\nTrack Order: ${trackOrderUrl}`;
+    const candidateServiceIds = Array.from(
+      new Set([rawServiceId, 'default_service', 'service_6iqk1xs'].filter(Boolean))
+    );
+    const candidateTemplateIds = Array.from(
+      new Set([
+        ...(rawTemplateId.startsWith('template_')
+          ? [rawTemplateId, rawTemplateId.replace(/^template_/, '')]
+          : [rawTemplateId, `template_${rawTemplateId}`]),
+        'template_50iyj49',
+      ])
+    );
 
-      if (emailJsRes.ok) {
-        return { sent: true, provider: 'EmailJS (Fallback)', recipient };
+    const templateParams = {
+      to_email: recipient,
+      email: recipient,
+      user_email: recipient,
+      customer_email: recipient,
+      recipient_email: recipient,
+      recipient: recipient,
+      to: recipient,
+      reply_to: recipient,
+      to_name: order.customer || 'Customer',
+      name: order.customer || 'Customer',
+      user_name: order.customer || 'Customer',
+      customer_name: order.customer || 'Customer',
+      from_name: 'CakeZone',
+      order_id: order.id,
+      date: placedTimeFormatted,
+      placed_time: placedTimeFormatted,
+      cake_item: order.cakeItem,
+      cake_details: order.cakeTypeDetail || itemsDetailText,
+      ordered_items: itemsDetailText.replace(/<br\s*\/?>/gi, ', '),
+      order_amount: formattedAmount,
+      cost: {
+        shipping: '₹0',
+        tax: 'Included',
+        total: formattedAmount,
+      },
+      orders:
+        order.items && order.items.length > 0
+          ? order.items.map((i) => ({
+              name: i.name,
+              units: i.quantity,
+              price: `₹${(i.price * i.quantity).toLocaleString('en-IN')}`,
+            }))
+          : [
+              {
+                name: order.cakeItem,
+                units: 1,
+                price: formattedAmount,
+              },
+            ],
+      order_status: 'Confirmed',
+      subject: emailJsSubject,
+      message: emailJsMessage,
+      html_message: htmlContent,
+    };
+
+    for (const serviceId of candidateServiceIds) {
+      for (const templateId of candidateTemplateIds) {
+        try {
+          const emailJsRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              service_id: serviceId,
+              template_id: templateId,
+              user_id: emailJsPublicKey,
+              template_params: templateParams,
+            }),
+          });
+
+          if (emailJsRes.ok) {
+            return { sent: true, provider: 'EmailJS (Fallback)', recipient };
+          }
+        } catch {
+          // Try next combination
+        }
       }
-    } catch {
-      // Fallback failed
     }
   }
 

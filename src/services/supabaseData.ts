@@ -1571,7 +1571,30 @@ export const createOrderInDb = async (params: {
     })
     .join(' | ');
   const safeCustomerName = sanitizeTextInput(params.customer, 120) || 'Customer';
-  const emailToStore = sanitizeTextInput(params.customerEmail || session?.user?.email || '', 160);
+
+  let resolvedEmailCandidate =
+    params.customerEmail ||
+    session?.user?.email ||
+    session?.user?.user_metadata?.email ||
+    session?.user?.user_metadata?.profile_email ||
+    '';
+
+  if (!resolvedEmailCandidate || !resolvedEmailCandidate.includes('@')) {
+    try {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (prof?.email && prof.email.includes('@')) {
+        resolvedEmailCandidate = prof.email;
+      }
+    } catch {
+      // ignore lookup error
+    }
+  }
+
+  const emailToStore = sanitizeTextInput(resolvedEmailCandidate, 160);
   const phoneToStore = sanitizeTextInput(params.customerPhone || '', 32);
   const safeSpecialInstructions = sanitizeTextInput(params.specialInstructions || '', 500);
   const createdAtIso = new Date().toISOString();
@@ -1587,10 +1610,14 @@ export const createOrderInDb = async (params: {
   const combinedInstructions = metaParts.join(' | ');
 
   if (phoneToStore) {
-    await supabase
-      .from('profiles')
-      .update({ phone: phoneToStore })
-      .eq('user_id', userId);
+    try {
+      await supabase
+        .from('profiles')
+        .update({ phone: phoneToStore })
+        .eq('user_id', userId);
+    } catch {
+      // Ignore profile update error so it never blocks order/email
+    }
   }
 
   // Insert with customer_email & customer_phone columns, falling back if columns were not added yet

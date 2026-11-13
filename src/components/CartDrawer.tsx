@@ -168,12 +168,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [placedOrderForBag, setPlacedOrderForBag] = useState<{
     orderCode: string;
     bagSignature: string;
+    emailSentTo?: string;
   } | null>(null);
   const [confirmedSnapshot, setConfirmedSnapshot] = useState<{
     items: CartItem[];
     total: number;
     contactNumber: string;
     whatsappUrl: string;
+    emailSentTo?: string;
   } | null>(null);
 
   const currentBagSignature = items
@@ -386,7 +388,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             ).customerName
           : customerName || 'Customer';
 
-        const { orderCode, data, error } = await createOrderInDb({
+        const { orderCode, data, error, emailResult } = await createOrderInDb({
           orderCode: pendingOrderCode,
           customer: customCustomerName || customerName || 'Customer',
           customerEmail: customerEmail || '',
@@ -406,6 +408,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setPlacedOrderForBag({
           orderCode: activeOrderCode,
           bagSignature: currentBagSignature,
+          emailSentTo: emailResult?.recipient || customerEmail || '',
         });
       } catch (err: any) {
         setContactError(err?.message || 'Unable to place order right now. Please try again.');
@@ -472,6 +475,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         total: snapshotTotal,
         contactNumber: snapshotPhone,
         whatsappUrl: `https://wa.me/${WHATSAPP_NUMBER_CLEAN}?text=${encodeURIComponent(finalMsg)}`,
+        emailSentTo: placedOrderForBag?.emailSentTo || customerEmail || '',
       });
 
       // Brief pause so user sees their sent message tick in the small WhatsApp window before relocating to Order Confirmed!
@@ -511,7 +515,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
-        <div className="w-screen max-w-md bg-surface sm:border-l border-outline-variant shadow-2xl flex flex-col justify-between relative">
+        <div className="w-screen max-w-md h-dvh max-h-dvh bg-surface sm:border-l border-outline-variant shadow-2xl flex flex-col justify-between relative">
           {/* Drawer Header */}
           <div className="px-4 sm:px-6 py-4 bg-surface-container border-b border-outline-variant/40 space-y-3">
             <div className="flex items-center justify-between">
@@ -591,10 +595,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <p className="text-xs sm:text-sm text-on-surface-variant max-w-xs mx-auto leading-relaxed">
                     Your artisanal order <span className="font-bold text-on-surface">{confirmedOrderCode}</span> has been confirmed and scheduled in the patisserie production queue.
                   </p>
-                  {customerEmail && (
+                  {(confirmedSnapshot?.emailSentTo || customerEmail) && (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-200/80 text-[11px] font-semibold mt-1">
                       <span className="material-symbols-outlined text-sm text-purple-600">mark_email_read</span>
-                      <span>Order receipt &amp; details sent to {customerEmail}</span>
+                      <span>
+                        Order receipt &amp; details sent to{' '}
+                        {confirmedSnapshot?.emailSentTo || customerEmail}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -939,6 +946,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span className="text-primary tabular-nums text-base">
                     ₹{total.toLocaleString('en-IN')}
                   </span>
+                </div>
+              )}
+
+              {contactError && (
+                <div className="p-2.5 rounded-xl bg-error/10 border border-error/30 text-error text-xs font-semibold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm shrink-0">error</span>
+                  <span>{contactError}</span>
                 </div>
               )}
 
