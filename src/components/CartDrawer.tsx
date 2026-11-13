@@ -189,7 +189,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   } | null>(null);
 
   const currentBagSignature = items
-    .map((i) => `${i.id}:${i.quantity}:${i.details || ''}`)
+    .map((i) => `${i.cakeId || i.name}:${i.quantity}:${i.details || ''}`)
     .join('|');
 
   useEffect(() => {
