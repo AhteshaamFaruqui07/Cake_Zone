@@ -47,6 +47,7 @@ import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { UpdatePassword } from './components/UpdatePassword';
 import { UserProfile } from './components/UserProfile';
 import { CakeZoneWaveLoader } from './components/CakeZoneWaveLoader';
+import { FlyToCartOverlay } from './components/FlyToCartOverlay';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>(() => {
@@ -518,7 +519,7 @@ export default function App() {
     setQuickViewCake(cake);
   };
 
-  const handleAddToCart = async (cake: CakeProduct, quantity = 1) => {
+  const handleAddToCart = async (cake: CakeProduct, quantity = 1, openDrawer = false) => {
     const tempId = `cart-${Date.now()}`;
     const fullCakeName = /cake/i.test(cake.name) ? cake.name : `${cake.name} Cake`;
     const cakeTypeDetails = [
@@ -551,8 +552,10 @@ export default function App() {
         },
       ];
     });
-    showToast(`Added ${quantity}x "${fullCakeName}" to your artisanal bag.`);
-    setIsCartOpen(true);
+    if (openDrawer) {
+      showToast(`Added ${quantity}x "${fullCakeName}" to your artisanal bag.`);
+      setIsCartOpen(true);
+    }
 
     const { data: savedItem } = await addCartItemToDb({
       cakeId: cake.id,
@@ -574,8 +577,7 @@ export default function App() {
   };
 
   const handleOrderNow = (cake: CakeProduct) => {
-    handleAddToCart(cake, 1);
-    setIsCartOpen(true);
+    handleAddToCart(cake, 1, true);
   };
 
   const handleAddCustomCake = async (customCake: {
@@ -733,6 +735,9 @@ export default function App() {
             }
             handleOrderNow(cake);
           }}
+          onAddToCart={(cake) => {
+            handleAddToCart(cake, 1, false);
+          }}
           onOpenConfigurator={() => {
             if (!currentUser) {
               handleRequireAuth('design custom cakes');
@@ -751,6 +756,7 @@ export default function App() {
           }}
           isLoggedIn={!!currentUser}
           onRequireAuth={handleRequireAuth}
+          isHeroReady={isLoaderFading}
         />
       )}
 
@@ -862,6 +868,7 @@ export default function App() {
         onClose={() => setIsConfiguratorOpen(false)}
         onAddCustomCake={handleAddCustomCake}
         settings={customCakeSettings}
+        userName={currentUser?.name}
       />
 
       {/* Quick View Modal */}
@@ -881,6 +888,9 @@ export default function App() {
           navigateTo('storefront');
         }}
       />
+
+      {/* Flying Add-to-Bag Overlay */}
+      <FlyToCartOverlay />
     </div>
   );
 }

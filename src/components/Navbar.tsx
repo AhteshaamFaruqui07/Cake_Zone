@@ -132,23 +132,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     }, actionLabel);
   };
 
-  const activeNavId =
-    currentScreen === 'signin'
-      ? 'signin'
-      : currentScreen === 'storefront'
-      ? activeSection
-      : 'home';
+  const activeNavId = currentScreen === 'storefront' ? activeSection : '';
   const targetNavId = hoveredNavId ?? activeNavId;
 
   useEffect(() => {
     const updatePill = () => {
-      const btn = navItemRefs.current[targetNavId];
+      const btn = targetNavId ? navItemRefs.current[targetNavId] : null;
       if (btn && btn.offsetWidth > 0) {
         setPillStyle({
           left: btn.offsetLeft,
           width: btn.offsetWidth,
           opacity: 1,
         });
+      } else {
+        setPillStyle((prev) => ({
+          ...prev,
+          opacity: 0,
+        }));
       }
     };
 
@@ -183,10 +183,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header
       ref={headerRef}
-      className="bg-surface/95 dark:bg-surface/95 backdrop-blur-md sticky top-0 z-50 w-full border-b border-outline-variant/40 shadow-xs"
+      className={`${
+        currentScreen === 'storefront' ? 'fixed top-0 left-0 right-0' : 'sticky top-0'
+      } z-50 w-full px-2.5 sm:px-4 lg:px-6 pt-2 sm:pt-3 pb-1 bg-transparent pointer-events-none`}
     >
-      {/* Main Top Nav Bar */}
-      <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-3.5 max-w-7xl mx-auto">
+      {/* Main Top Nav Bar — Crystal Clear Apple Liquid Glass Floating Capsule */}
+      <div
+        className="pointer-events-auto relative flex justify-between items-center gap-1 lg:gap-2 px-3 md:px-4 lg:px-5 py-2 sm:py-2.5 max-w-6xl mx-auto rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.24)_0%,rgba(255,255,255,0.10)_50%,rgba(255,255,255,0.18)_100%)] backdrop-blur-[20px] backdrop-saturate-[170%] border border-white/60 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.14),0_2px_10px_rgba(15,23,42,0.06),inset_0_1.5px_1.5px_rgba(255,255,255,0.82),inset_0_-1px_2px_rgba(255,255,255,0.28)] transition-all duration-300 overflow-visible"
+      >
+        {/* Seamless Specular Clear Glass Rim Highlight */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.42)_0%,rgba(255,255,255,0.08)_38%,rgba(255,255,255,0)_60%)]"
+        />
+
         {/* Brand / Logo Zone */}
         <button
           type="button"
@@ -196,7 +206,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onNavigate('storefront');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="flex items-center gap-2.5 sm:gap-3 text-left focus:outline-none group cursor-pointer shrink-0"
+          className="relative z-10 flex items-center gap-2 lg:gap-2.5 text-left focus:outline-none group cursor-pointer shrink-0 pl-0.5"
         >
           <img
             src={LOGO_URL}
@@ -208,7 +218,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onNavigate('storefront');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="w-12 h-12 -my-1.5 sm:w-[52px] sm:h-[52px] sm:-my-1.5 rounded-full object-cover shadow-xs group-hover:scale-105 transition-transform cursor-pointer shrink-0"
+            className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full object-cover ring-2 ring-white/80 shadow-sm group-hover:scale-105 transition-transform cursor-pointer shrink-0"
             onError={(e) => {
               (e.currentTarget as HTMLElement).style.display = 'none';
             }}
@@ -221,7 +231,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onNavigate('storefront');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="text-lg sm:text-xl font-black text-primary tracking-tight font-headline cursor-pointer whitespace-nowrap"
+            className="text-base md:text-[15px] lg:text-lg font-black text-[#1d1b20] tracking-tight font-headline cursor-pointer whitespace-nowrap drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]"
           >
             CakeZone
           </span>
@@ -231,9 +241,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         <nav
           ref={navRef}
           onMouseLeave={() => setHoveredNavId(null)}
-          className="relative hidden md:flex items-center gap-0.5 lg:gap-1 bg-transparent border-0 shadow-none"
+          className="relative z-10 hidden md:flex items-center gap-0 lg:gap-1 bg-transparent border-0 shadow-none"
         >
-          {/* Single Continuous Sliding & Morphing Colored Pill */}
+          {/* Single Continuous Sliding & Morphing Glossy Liquid Pill */}
           <span
             aria-hidden="true"
             style={{
@@ -244,10 +254,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               transition:
                 'left 420ms cubic-bezier(0.32, 1.25, 0.37, 1), width 380ms cubic-bezier(0.32, 1.25, 0.37, 1), transform 240ms ease-out, opacity 200ms ease-out',
             }}
-            className="pointer-events-none absolute inset-y-0 rounded-full bg-gradient-to-r from-primary via-[#7c3aed] to-[#9333ea] border-0 shadow-[0_6px_20px_-2px_rgba(124,58,237,0.55),inset_0_1px_2px_rgba(255,255,255,0.35)] z-0"
+            className="pointer-events-none absolute inset-y-0 rounded-full bg-gradient-to-r from-[#4f378a] via-[#6750a4] to-[#7c3aed] border border-white/40 shadow-[0_6px_18px_-3px_rgba(79,55,138,0.45),inset_0_1px_2px_rgba(255,255,255,0.5)] z-0"
           >
             {/* Top Subtle Specular Highlight Arc */}
-            <span className="absolute top-[2px] left-2.5 right-2.5 h-[38%] rounded-full bg-gradient-to-b from-white/30 via-white/10 to-transparent" />
+            <span className="absolute top-[1.5px] left-2.5 right-2.5 h-[40%] rounded-full bg-gradient-to-b from-white/38 via-white/10 to-transparent" />
           </span>
 
           {[
@@ -299,17 +309,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               isActive: currentScreen === 'storefront' && activeSection === 'testimonials',
               onClick: () => scrollToSection('testimonials', 'view testimonials'),
             },
-            ...(!user
-              ? [
-                  {
-                    id: 'signin',
-                    label: 'Login',
-                    icon: 'person',
-                    isActive: currentScreen === 'signin',
-                    onClick: () => onNavigate('signin'),
-                  },
-                ]
-              : []),
           ].map((item) => {
             const isHighlighted = targetNavId === item.id;
             return (
@@ -322,18 +321,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onMouseEnter={() => setHoveredNavId(item.id)}
                 onFocus={() => setHoveredNavId(item.id)}
                 onClick={item.onClick}
-                className={`group relative z-10 px-2.5 lg:px-3.5 py-1.5 rounded-full border-0 outline-none text-xs lg:text-sm font-label cursor-pointer whitespace-nowrap focus:outline-none flex items-center gap-1 lg:gap-1.5 transition-all duration-300 ${
+                className={`group relative z-10 px-1.5 lg:px-2.5 xl:px-3 py-1.5 rounded-full border-0 outline-none text-[11px] lg:text-[13px] font-label cursor-pointer whitespace-nowrap focus:outline-none flex items-center gap-1 lg:gap-1.5 transition-all duration-300 ${
                   isHighlighted
-                    ? 'text-white font-extrabold drop-shadow-[0_1px_4px_rgba(0,0,0,0.2)]'
-                    : 'text-on-surface-variant hover:text-primary font-semibold'
+                    ? 'text-white font-extrabold drop-shadow-[0_1px_3px_rgba(34,0,93,0.35)]'
+                    : 'text-[#1d1b20]/85 hover:text-[#4f378a] font-semibold'
                 }`}
               >
-                <span
-                  className={`material-symbols-outlined text-[14px] lg:text-[15px] leading-none transition-transform duration-300 ${
-                    isHighlighted ? 'scale-110 text-white' : 'text-on-surface-variant/80 group-hover:text-primary'
-                  }`}
-                >
-                  {item.icon}
+                <span className="hidden xl:inline-flex items-center">
+                  <span
+                    className={`material-symbols-outlined text-[14px] leading-none transition-transform duration-300 ${
+                      isHighlighted ? 'scale-110 text-white' : 'text-[#494551]/85 group-hover:text-[#4f378a]'
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
                 </span>
                 <span>{item.label}</span>
               </button>
@@ -342,7 +343,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
 
         {/* Right Actions (Cart, Profile, Mobile Menu Button) */}
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="relative z-10 flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Shopping Bag Button */}
           <button
             id="navbar-cart-button"
@@ -351,23 +352,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               handleProtectedNav(onOpenCart, 'view your shopping bag');
             }}
             aria-label="Shopping Bag"
-            className={`relative inline-flex items-center justify-center w-10 h-10 text-on-surface hover:text-primary transition-all rounded-full hover:bg-surface-container cursor-pointer shrink-0 ${
+            className={`relative inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 text-[#1d1b20] hover:text-[#4f378a] transition-all rounded-full hover:bg-white/50 cursor-pointer shrink-0 ${
               isCartBouncing
-                ? 'scale-125 text-[#ff2d55] bg-pink-50 ring-4 ring-[#ff2d55]/30'
+                ? 'scale-125 text-[#4f378a] bg-white/75 ring-4 ring-[#6750a4]/30'
                 : 'active:scale-95'
             }`}
           >
             <span
-              className={`material-symbols-outlined text-[22px] leading-none transition-transform duration-300 ${
-                isCartBouncing ? 'scale-115 text-[#ff2d55] -rotate-12' : ''
+              className={`material-symbols-outlined text-[21px] leading-none transition-transform duration-300 ${
+                isCartBouncing ? 'scale-115 text-[#4f378a] -rotate-12' : ''
               }`}
             >
               shopping_bag
             </span>
             <span
-              className={`absolute top-0.5 right-0.5 bg-primary text-on-primary text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shadow-xs tabular-nums transition-all duration-300 ${
+              className={`absolute top-0.5 right-0.5 bg-[#4f378a] text-white text-[10px] font-bold rounded-full min-w-[17px] h-[17px] px-1 flex items-center justify-center ring-1 ring-white/85 shadow-xs tabular-nums transition-all duration-300 ${
                 isCartBouncing
-                  ? 'scale-135 bg-[#ff2d55] text-white ring-2 ring-white shadow-md'
+                  ? 'scale-135 bg-[#6750a4] text-white ring-2 ring-white shadow-md'
                   : ''
               }`}
             >
@@ -378,7 +379,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Profile with Hover/Click Dropdown */}
           {user ? (
             <div
-              className="relative group pl-1.5 sm:pl-2 border-l border-outline-variant/40"
+              className="relative group pl-1.5 sm:pl-2 border-l border-slate-900/12"
               onMouseEnter={() => setIsDropdownOpen(true)}
               onMouseLeave={() => setIsDropdownOpen(false)}
             >
@@ -388,27 +389,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setIsDropdownOpen((prev) => !prev);
                   setIsMobileMenuOpen(false);
                 }}
-                className="flex items-center gap-2 py-1 px-1.5 rounded-xl hover:bg-surface-container transition-all cursor-pointer"
+                className="flex items-center gap-2 py-1 px-1.5 rounded-full hover:bg-white/50 transition-all cursor-pointer"
                 title="View User Profile"
               >
-                <div className="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-[#4f378a] to-[#6750a4] text-white ring-1 ring-white/80 flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
                   {user.initials}
                 </div>
-                <span className="hidden sm:inline text-xs font-bold text-on-surface max-w-[110px] truncate">
+                <span className="hidden sm:inline text-xs font-bold text-[#1d1b20] max-w-[100px] truncate">
                   {user.name}
                 </span>
-                <span className="hidden sm:inline-block material-symbols-outlined text-xs text-on-surface-variant transition-transform group-hover:rotate-180">
+                <span className="hidden sm:inline-block material-symbols-outlined text-xs text-[#494551] transition-transform group-hover:rotate-180">
                   expand_more
                 </span>
               </button>
 
               {/* Dropdown Menu on hover / toggle */}
               <div
-                className={`absolute right-0 top-full pt-1.5 z-50 ${
+                className={`absolute right-0 top-full pt-2 z-50 ${
                   isDropdownOpen ? 'block' : 'hidden group-hover:block'
                 }`}
               >
-                <div className="w-48 bg-surface rounded-xl shadow-xl border border-outline-variant/40 py-1.5 overflow-hidden">
+                <div className="w-48 bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-outline-variant/40 py-1.5 overflow-hidden">
                   <div className="px-3.5 py-2 border-b border-outline-variant/30 bg-surface-container-low/50">
                     <p className="text-xs font-bold text-on-surface truncate">{user.name}</p>
                     <p className="text-[11px] text-on-surface-variant capitalize">{user.role}</p>
@@ -458,7 +459,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setIsMobileMenuOpen(false);
                 onNavigate('signin');
               }}
-              className="hidden sm:inline-flex px-3.5 py-1.5 rounded-xl border border-outline-variant text-xs font-bold text-on-surface hover:bg-surface-variant transition-colors cursor-pointer whitespace-nowrap"
+              className="hidden sm:inline-flex px-3 lg:px-3.5 py-1.5 rounded-full border border-white/65 bg-white/30 hover:bg-white/55 text-[11px] lg:text-xs font-bold text-[#1d1b20] shadow-[inset_0_1px_1px_rgba(255,255,255,0.75)] transition-all cursor-pointer whitespace-nowrap"
             >
               Sign In
             </button>
@@ -473,9 +474,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
             aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={isMobileMenuOpen}
-            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl text-on-surface hover:text-primary hover:bg-surface-container transition-colors active:scale-95 cursor-pointer"
+            className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full text-[#1d1b20] hover:text-[#4f378a] hover:bg-white/50 transition-colors active:scale-95 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[24px] leading-none">
+            <span className="material-symbols-outlined text-[22px] leading-none">
               {isMobileMenuOpen ? 'close' : 'menu'}
             </span>
           </button>
@@ -484,7 +485,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Navigation Drawer */}
       {isMobileMenuOpen && (
-        <div className="md:hidden absolute right-0 top-full w-[68%] min-w-[235px] max-w-[290px] max-h-[calc(100dvh-60px)] overflow-y-auto z-50 border-t border-l border-outline-variant/40 bg-[#fbf6f0] shadow-2xl rounded-bl-2xl animate-fadeIn">
+        <div className="pointer-events-auto md:hidden absolute right-3 top-full mt-1 w-[68%] min-w-[235px] max-w-[290px] max-h-[calc(100dvh-72px)] overflow-y-auto z-50 border border-outline-variant/40 bg-[#fbf6f0] shadow-2xl rounded-2xl animate-fadeIn">
           <nav className="relative flex flex-col pt-3">
             <div className="flex flex-col px-3 pb-2 space-y-1 relative z-10">
               <button

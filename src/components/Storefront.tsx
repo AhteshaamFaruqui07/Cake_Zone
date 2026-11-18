@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CakeProduct, GalleryItem, GallerySectionSettings } from '../types';
 import {
   HERO_CAKE_URL,
@@ -14,7 +14,6 @@ import {
   deleteGalleryItemFromDb,
   saveGallerySectionSettings,
 } from '../services/supabaseData';
-import { triggerFlyToCart } from './FlyToCartOverlay';
 
 interface StorefrontProps {
   cakes?: CakeProduct[];
@@ -32,6 +31,7 @@ interface StorefrontProps {
   onUpdateUserName?: (name: string) => void;
   isLoggedIn?: boolean;
   onRequireAuth?: (actionName?: string) => void;
+  isHeroReady?: boolean;
 }
 
 export const Storefront: React.FC<StorefrontProps> = ({
@@ -50,6 +50,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
   onUpdateUserName,
   isLoggedIn,
   onRequireAuth,
+  isHeroReady = true,
 }) => {
   const [localName, setLocalName] = useState(userName || '');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -61,7 +62,52 @@ export const Storefront: React.FC<StorefrontProps> = ({
     'terms' | 'privacy' | 'faq' | 'shipping' | null
   >(null);
   const [typedWord, setTypedWord] = useState<string>('Perfection');
+  const [heroStats, setHeroStats] = useState({
+    eggless: 0,
+    rating: 0,
+    orders: 0,
+    since: 0,
+  });
   const [likedInspirationIds, setLikedInspirationIds] = useState<Record<string, boolean>>({});
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playClick = () => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      // Laser / Energy Click: downward sine sweep from 800 Hz to 200 Hz over 120 ms
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(200, now + 0.12);
+
+      // Exponential volume decay over 120 ms
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.125);
+    } catch {
+      // Ignore audio errors in environments without Web Audio support
+    }
+  };
 
   // Admin Gallery Management State
   const [isGalleryAdminOpen, setIsGalleryAdminOpen] = useState(false);
@@ -286,6 +332,70 @@ export const Storefront: React.FC<StorefrontProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isHeroReady) return;
+
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setHeroStats({
+        eggless: 100,
+        rating: 4.9,
+        orders: 12000,
+        since: 2020,
+      });
+      return;
+    }
+
+    let rafId = 0;
+    const duration = 1800;
+    let startTime: number | null = null;
+
+    setHeroStats({
+      eggless: 0,
+      rating: 0,
+      orders: 0,
+      since: 0,
+    });
+
+    const animateDigits = (timestamp: number) => {
+      if (startTime === null) {
+        startTime = timestamp;
+      }
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+
+      setHeroStats({
+        eggless: Math.round(eased * 100),
+        rating: Number((eased * 4.9).toFixed(1)),
+        orders: Math.round(eased * 12000),
+        since: Math.round(eased * 2020),
+      });
+
+      if (progress < 1) {
+        rafId = window.requestAnimationFrame(animateDigits);
+      } else {
+        setHeroStats({
+          eggless: 100,
+          rating: 4.9,
+          orders: 12000,
+          since: 2020,
+        });
+      }
+    };
+
+    rafId = window.requestAnimationFrame(animateDigits);
+
+    return () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [isHeroReady]);
+
   const catalogCakes = cakes && cakes.length > 0 ? cakes : SIGNATURE_CAKES;
   const categories = ['All', 'Birthday', 'Chocolate', 'Vanilla', 'Red Velvet', 'Custom'];
 
@@ -342,7 +452,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
     <div className="w-full overflow-x-hidden">
       {/* Hero Section with Full Background Video */}
       <section
-        className="relative overflow-hidden min-h-[480px] sm:min-h-[560px] md:min-h-[640px] flex items-center py-12 sm:py-16 md:py-24"
+        className="relative overflow-hidden min-h-[520px] sm:min-h-[600px] md:min-h-[680px] flex items-center pt-24 pb-12 sm:pt-28 sm:pb-16 md:pt-32 md:pb-24"
         id="home"
       >
         {/* Full Hero Video Background with Soft Luminous Whiteness & Rich Patisserie Colors */}
@@ -362,7 +472,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
         {/* Hero Content Canvas */}
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 md:px-12 w-full">
-          <div className="flex flex-col items-start gap-4 sm:gap-5 max-w-xl md:-mt-8 lg:-mt-10">
+          <div className="flex flex-col items-start gap-4 sm:gap-5 max-w-xl">
             {/* Welcome, Guest / User Heading */}
             <div className="inline-flex items-center gap-2 sm:gap-2.5 text-sm sm:text-base md:text-[17px] tracking-tight">
               <svg
@@ -463,6 +573,39 @@ export const Storefront: React.FC<StorefrontProps> = ({
                 <span className="relative z-10">Design Custom Cake</span>
               </button>
             </div>
+
+            {/* Colorful Animated Hero Stats: Eggless Creations, No. of Orders & Since */}
+            <div className="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap sm:items-start sm:gap-10 pt-2 sm:pt-3 w-full sm:w-auto">
+              {/* 100% Eggless Creations */}
+              <div className="flex flex-col drop-shadow-[0_1px_5px_rgba(255,255,255,0.92)]">
+                <span className="text-[20px] sm:text-[28px] font-black font-headline tracking-tight leading-none tabular-nums bg-gradient-to-r from-[#5B21B6] via-[#7C3AED] to-[#A855F7] bg-clip-text text-transparent">
+                  {heroStats.eggless}%
+                </span>
+                <span className="mt-1 text-[8.5px] sm:text-[11px] font-extrabold tracking-[0.07em] sm:tracking-[0.14em] uppercase text-[#4C1D95] leading-tight">
+                  EGGLESS CREATIONS
+                </span>
+              </div>
+
+              {/* 4.9/5 Over 12,000 Orders */}
+              <div className="flex flex-col drop-shadow-[0_1px_5px_rgba(255,255,255,0.92)]">
+                <span className="text-[20px] sm:text-[28px] font-black font-headline tracking-tight leading-none tabular-nums bg-gradient-to-r from-[#9D174D] via-[#DB2777] to-[#EC4899] bg-clip-text text-transparent">
+                  {heroStats.rating.toFixed(1)}/5
+                </span>
+                <span className="mt-1 text-[8.5px] sm:text-[11px] font-extrabold tracking-[0.07em] sm:tracking-[0.14em] uppercase text-[#831843] leading-tight">
+                  OVER 12,000 ORDERS
+                </span>
+              </div>
+
+              {/* Since 2020 */}
+              <div className="flex flex-col drop-shadow-[0_1px_5px_rgba(255,255,255,0.92)]">
+                <span className="text-[20px] sm:text-[28px] font-black font-headline tracking-tight leading-none tabular-nums bg-gradient-to-r from-[#92400E] via-[#B45309] to-[#D97706] bg-clip-text text-transparent">
+                  {heroStats.since}
+                </span>
+                <span className="mt-1 text-[8.5px] sm:text-[11px] font-extrabold tracking-[0.07em] sm:tracking-[0.14em] uppercase text-[#78350F] leading-tight">
+                  SINCE
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -471,26 +614,28 @@ export const Storefront: React.FC<StorefrontProps> = ({
       <section className="scroll-mt-20 sm:scroll-mt-24 py-12 sm:py-16 md:py-20 bg-[#FBF7F2]" id="collections">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Section Header */}
-          <div className="max-w-3xl mb-6 sm:mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="w-6 h-[1.5px] bg-[#8B4513] inline-block" />
-              <span className="text-[#8B4513] font-semibold text-xs tracking-[0.2em] uppercase">
-                OUR CAKES
-              </span>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 sm:mb-8">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-6 h-[1.5px] bg-[#8B4513] inline-block" />
+                <span className="text-[#8B4513] font-semibold text-xs tracking-[0.2em] uppercase">
+                  OUR CAKES
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-4xl md:text-[44px] font-bold font-headline text-[#1A1412] tracking-tight leading-tight">
+                Explore Our Signature Cakes
+              </h2>
+              <p className="text-[#5C534E] text-sm sm:text-base md:text-lg mt-2">
+                From classic favourites to unique creations, find the perfect cake for your special
+                moments.
+              </p>
             </div>
-            <h2 className="text-2xl sm:text-4xl md:text-[44px] font-bold font-headline text-[#1A1412] tracking-tight leading-tight">
-              Explore Our Signature Cakes
-            </h2>
-            <p className="text-[#5C534E] text-sm sm:text-base md:text-lg mt-2">
-              From classic favourites to unique creations, find the perfect cake for your special
-              moments.
-            </p>
           </div>
 
           {/* Category Filter Pills + Search & Sort Controls */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 mb-7 sm:mb-9">
             {/* Category Filter Pills (Horizontally scrollable on mobile, single row on desktop) */}
-            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto lg:flex-nowrap pb-1.5 lg:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto lg:flex-nowrap pb-1 lg:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {categories.map((category) => {
                 const isActive = selectedCategory === category;
                 return (
@@ -588,15 +733,28 @@ export const Storefront: React.FC<StorefrontProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-            {filteredCakes.map((cake) => (
+            {filteredCakes.map((cake, index) => {
+              const cardPalettes = [
+                'bg-[#FFF3D6] border-[#EDD8A3]',
+                'bg-[#E3F5EA] border-[#BEE2CB]',
+                'bg-[#FDE8EE] border-[#F3C5D3]',
+                'bg-[#E3F2FD] border-[#BCDAF6]',
+                'bg-[#EFE8FF] border-[#D7C6FA]',
+                'bg-[#FBEAD6] border-[#ECCBA6]',
+                'bg-[#FCE7F3] border-[#F3C4DF]',
+                'bg-[#FFEDD5] border-[#FCD1A2]',
+              ];
+              const cardTheme = cardPalettes[index % cardPalettes.length];
+
+              return (
               <div
                 key={cake.id}
                 onClick={() => {
                   handleProtectedAction(() => onQuickView(cake), `view ${cake.name}`);
                 }}
-                className="bg-[#FCF9F5] rounded-xl sm:rounded-2xl overflow-hidden border border-[#EDE5DA] shadow-2xs hover:shadow-md transition-all duration-300 flex flex-col group p-1.5 sm:p-2 cursor-pointer"
+                className={`${cardTheme} rounded-xl sm:rounded-2xl overflow-hidden border shadow-2xs hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col group p-2 sm:p-2.5 cursor-pointer`}
               >
-                <div className="relative overflow-hidden rounded-lg sm:rounded-xl aspect-[1.12/1] bg-[#F3ECE2]">
+                <div className="relative overflow-hidden rounded-lg sm:rounded-xl aspect-[1.12/1] bg-white/75">
                   <img
                     src={cake.image}
                     alt={cake.name}
@@ -610,23 +768,23 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="pt-2.5 sm:pt-3.5 pb-1.5 sm:pb-2 px-1 sm:px-2 flex flex-col flex-grow justify-between">
+                <div className="pt-2.5 sm:pt-3.5 pb-1 sm:pb-1.5 px-1 sm:px-1.5 flex flex-col flex-grow justify-between">
                   <div>
-                    <h3 className="font-headline font-semibold text-sm sm:text-[19px] text-[#1A1412] leading-snug line-clamp-1">
+                    <h3 className="font-headline font-semibold text-sm sm:text-[18px] text-[#1A1412] leading-snug line-clamp-1">
                       {cake.name}
                     </h3>
-                    <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-[#5C534E]">
-                      <span className="font-semibold text-[#2D2420] tabular-nums">
+                    <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-[#493E38]">
+                      <span className="font-semibold text-[#1A1412] tabular-nums">
                         ₹ {cake.price.toLocaleString('en-IN')}
                       </span>{' '}
                       <span>onwards</span>
                     </div>
                     <div className="mt-1 sm:mt-1.5 flex items-center gap-1 text-[11px] sm:text-xs">
-                      <span className="text-[#F59E0B] text-xs sm:text-sm leading-none">★</span>
+                      <span className="text-[#D97706] text-xs sm:text-sm leading-none">★</span>
                       <span className="font-semibold text-[#1A1412] tabular-nums">
                         {(cake.rating ?? 4.8).toFixed(1)}
                       </span>
-                      <span className="text-[#6E655F] tabular-nums">
+                      <span className="text-[#5C534E] tabular-nums">
                         ({cake.reviewsCount ?? 90})
                       </span>
                     </div>
@@ -638,7 +796,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
                         e.stopPropagation();
                         handleProtectedAction(() => onQuickView(cake), `view ${cake.name}`);
                       }}
-                      className="flex-1 py-1.5 sm:py-2 px-1.5 sm:px-3 rounded-full border border-[#6E5A4F] text-[#2D2420] text-[10px] sm:text-xs font-medium hover:bg-[#F2EAE0] transition-colors active:scale-95 cursor-pointer whitespace-nowrap"
+                      className="flex-1 py-1.5 sm:py-2 px-1.5 sm:px-3 rounded-full border border-[#4E2F21]/50 bg-white/75 text-[#1A1412] text-[10px] sm:text-xs font-medium hover:bg-white transition-colors active:scale-95 cursor-pointer whitespace-nowrap"
                     >
                       Quick View
                     </button>
@@ -646,6 +804,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
+                        playClick();
                         handleProtectedAction(() => onOrderNow(cake), `order ${cake.name}`);
                       }}
                       className="flex-1 py-1.5 sm:py-2 px-1.5 sm:px-3 rounded-full bg-[#4E2F21] text-white text-[10px] sm:text-xs font-medium hover:bg-[#3B2217] transition-colors shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
@@ -655,7 +814,8 @@ export const Storefront: React.FC<StorefrontProps> = ({
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
             </div>
           )}
         </div>
@@ -1741,15 +1901,41 @@ export const Storefront: React.FC<StorefrontProps> = ({
             </div>
           </div>
 
-          {/* Bottom Copyright & Made with Love */}
+          {/* Bottom Copyright, Made with Love & Animated Move-Up Arrow */}
           <div className="border-t border-pink-500/25 pt-4 flex flex-col sm:flex-row justify-between items-center gap-3 text-center sm:text-left text-xs">
             <div className="text-slate-400 font-sans">
               ⓒ 2027 <strong className="text-[#ff2d55] font-bold">CakeZone</strong>. All rights reserved. Handcrafted Eggless Creations.
             </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="h-3 w-[1px] bg-slate-700 hidden sm:inline-block" />
-              <span className="text-[#ff2d55] text-sm">♥</span>
-              <span className="italic text-slate-300 font-sans">Made with Love in Jabalpur</span>
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-[1px] bg-slate-700 hidden sm:inline-block" />
+                <span className="text-[#ff2d55] text-sm">♥</span>
+                <span className="italic text-slate-300 font-sans">Made with Love in Jabalpur</span>
+              </div>
+              <button
+                type="button"
+                id="footer-scroll-top-btn"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                aria-label="Back to top"
+                title="Back to top"
+                className="group inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full bg-[#1a0d16]/90 border border-pink-500/40 hover:border-[#ff2d55] text-slate-200 hover:text-white shadow-[0_6px_18px_-4px_rgba(255,45,85,0.38)] hover:shadow-[0_10px_24px_-4px_rgba(255,45,85,0.6)] transition-all duration-300 cursor-pointer active:scale-95"
+              >
+                <span className="text-[11px] font-semibold tracking-wide">Back to Top</span>
+                <span className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#ff2d55] to-[#e11d48] text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                  <svg
+                    className="w-3.5 h-3.5 footer-arrow-bounce"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 19V5" />
+                    <path d="m5 12 7-7 7 7" />
+                  </svg>
+                </span>
+              </button>
             </div>
           </div>
         </div>

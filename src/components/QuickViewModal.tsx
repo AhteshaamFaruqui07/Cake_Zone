@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CakeProduct } from '../types';
+import { triggerFlyToCart } from './FlyToCartOverlay';
 
 interface QuickViewModalProps {
   cake: CakeProduct | null;
@@ -13,6 +14,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   onAddToCart,
 }) => {
   const [quantity, setQuantity] = useState(1);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   if (!cake) return null;
 
@@ -30,6 +32,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
         {/* Image side */}
         <div className="md:w-[44%] h-44 sm:h-52 md:h-auto relative bg-surface-container flex items-center justify-center p-3 sm:p-5 shrink-0">
           <img
+            ref={imgRef}
             src={cake.image}
             alt={cake.name}
             className="w-4/5 h-4/5 max-w-[160px] max-h-[150px] sm:max-w-[210px] sm:max-h-[210px] object-contain rounded-xl shadow-sm"
@@ -106,6 +109,9 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
 
             <button
               onClick={() => {
+                if (imgRef.current) {
+                  triggerFlyToCart(cake.image, imgRef.current, cake.name);
+                }
                 onAddToCart(cake, quantity);
                 onClose();
               }}

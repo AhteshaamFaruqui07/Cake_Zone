@@ -1,7 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { HERO_CAKE_URL } from '../data/initialData';
-import { createCustomCakeInDb, uploadFileToAppStorage } from '../services/supabaseData';
+import {
+  createCustomCakeInDb,
+  fetchUserProfile,
+  uploadFileToAppStorage,
+} from '../services/supabaseData';
+import { supabase } from '../supabaseClient';
 import { CartItem, CustomCakeBuilderSettings } from '../types';
+
+const DESIGN_NOTES_PLACEHOLDER =
+  'Describe your dream cake’s design, colors, flavors, tiers, theme, or special details...';
 
 interface CakeConfiguratorModalProps {
   isOpen: boolean;
@@ -16,17 +24,21 @@ interface CakeConfiguratorModalProps {
     customCakeData?: CartItem['customCakeData'];
   }) => void;
   settings?: CustomCakeBuilderSettings;
+  userName?: string;
 }
 
 export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
   isOpen,
   onClose,
   onAddCustomCake,
+  userName,
 }) => {
-  const [fullName, setFullName] = useState('');
+  const [fullName, setFullName] = useState(userName || '');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [designNotes, setDesignNotes] = useState('');
+  const [typedPlaceholder, setTypedPlaceholder] = useState(DESIGN_NOTES_PLACEHOLDER);
+  const [cursorVisible, setCursorVisible] = useState(true);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string>('');
   const [referenceFileName, setReferenceFileName] = useState<string>('');
@@ -35,6 +47,8 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasManuallyEditedNameRef = useRef(false);
+  const resolvedUserNameRef = useRef((userName || '').trim());
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -50,6 +64,152 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
       }
     }
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncFullName = async () => {
+      const propName = (userName || '').trim();
+      const validPropName = propName && propName !== 'Member' ? propName : '';
+
+      if (validPropName) {
+        resolvedUserNameRef.current = validPropName;
+        if (!hasManuallyEditedNameRef.current) {
+          setFullName(validPropName);
+        }
+      } else if (!propName) {
+        resolvedUserNameRef.current = '';
+        if (!hasManuallyEditedNameRef.current) {
+          setFullName('');
+        }
+      }
+
+      try {
+        const [{ data: { session } }, { data: dbProfile }] = await Promise.all([
+          supabase.auth.getSession(),
+          fetchUserProfile(),
+        ]);
+
+        if (isCancelled) return;
+
+        if (!session?.user) {
+          if (!validPropName) {
+            resolvedUserNameRef.current = '';
+            if (!hasManuallyEditedNameRef.current) {
+              setFullName('');
+            }
+          }
+          return;
+        }
+
+        const profileFullName = (dbProfile?.full_name || '').trim();
+        const metaFullName = (
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          ''
+        ).trim();
+        const emailFallback = (session.user.email || '').split('@')[0]?.trim() || '';
+
+        const bestName =
+          (profileFullName && profileFullName !== 'Member' ? profileFullName : '') ||
+          (metaFullName && metaFullName !== 'Member' ? metaFullName : '') ||
+          validPropName ||
+          emailFallback;
+
+        if (bestName) {
+          resolvedUserNameRef.current = bestName;
+          if (!hasManuallyEditedNameRef.current) {
+            setFullName(bestName);
+          }
+        }
+      } catch {
+        // Keep propName fallback on profile/session fetch error
+      }
+    };
+
+    syncFullName();
+
+    if (!isOpen) {
+      hasManuallyEditedNameRef.current = false;
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [userName, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || designNotes.length > 0) {
+      return;
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setTypedPlaceholder(DESIGN_NOTES_PLACEHOLDER);
+      setCursorVisible(false);
+      return;
+    }
+
+    let currentIndex = 0;
+    let isDeleting = false;
+    let timerId: number;
+    let isPaused = false;
+
+    setTypedPlaceholder('');
+    setCursorVisible(true);
+
+    const step = () => {
+      if (!isDeleting) {
+        currentIndex += 1;
+        setTypedPlaceholder(DESIGN_NOTES_PLACEHOLDER.slice(0, currentIndex));
+        if (currentIndex >= DESIGN_NOTES_PLACEHOLDER.length) {
+          isDeleting = true;
+          isPaused = true;
+          timerId = window.setTimeout(() => {
+            isPaused = false;
+            step();
+          }, 2200);
+        } else {
+          isPaused = false;
+          setCursorVisible(true);
+          timerId = window.setTimeout(step, 55);
+        }
+      } else {
+        currentIndex -= 1;
+        setTypedPlaceholder(DESIGN_NOTES_PLACEHOLDER.slice(0, currentIndex));
+        if (currentIndex <= 0) {
+          isDeleting = false;
+          isPaused = true;
+          timerId = window.setTimeout(() => {
+            isPaused = false;
+            step();
+          }, 600);
+        } else {
+          isPaused = false;
+          setCursorVisible(true);
+          timerId = window.setTimeout(step, 26);
+        }
+      }
+    };
+
+    timerId = window.setTimeout(step, 350);
+
+    const blinkInterval = window.setInterval(() => {
+      if (isPaused) {
+        setCursorVisible((prev) => !prev);
+      } else {
+        setCursorVisible(true);
+      }
+    }, 530);
+
+    return () => {
+      window.clearTimeout(timerId);
+      window.clearInterval(blinkInterval);
+    };
+  }, [isOpen, designNotes]);
 
   if (!isOpen) return null;
 
@@ -215,7 +375,8 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
         },
       });
 
-      setFullName('');
+      hasManuallyEditedNameRef.current = false;
+      setFullName(resolvedUserNameRef.current || (userName || '').trim() || '');
       setPhoneNumber('');
       setEventDate('');
       setDesignNotes('');
@@ -229,17 +390,17 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
-      <div className="relative bg-[#FFFEFC] max-w-[335px] sm:max-w-[375px] w-full rounded-[20px] sm:rounded-[22px] shadow-2xl border border-[#EDE6DF] px-4 py-3.5 sm:px-5 sm:py-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 md:p-6">
+      <div className="relative bg-[#FFFEFC] max-w-[335px] sm:max-w-[400px] md:max-w-[540px] lg:max-w-[590px] w-full max-h-[94vh] overflow-y-auto rounded-[20px] sm:rounded-[24px] md:rounded-[28px] shadow-2xl border border-[#EDE6DF] px-4 py-3.5 sm:px-5 sm:py-4 md:px-8 md:py-7">
         {/* Top-Right Close Button */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Close modal"
-          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-[#F3F2F0] hover:bg-[#E6E4E1] text-[#23140D] flex items-center justify-center transition-colors cursor-pointer"
+          className="absolute top-3 right-3 md:top-5 md:right-5 w-7 h-7 md:w-9 md:h-9 rounded-full bg-[#F3F2F0] hover:bg-[#E6E4E1] text-[#23140D] flex items-center justify-center transition-colors cursor-pointer"
         >
           <svg
-            className="w-3 h-3"
+            className="w-3 h-3 md:w-4 md:h-4"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -253,10 +414,10 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
         </button>
 
         {/* Header with Fountain Pen Nib Icon */}
-        <div className="text-center mb-2.5 sm:mb-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#EFE6FF] flex items-center justify-center mx-auto mb-1.5 sm:mb-2">
+        <div className="text-center mb-2.5 sm:mb-3 md:mb-5">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-full bg-[#EFE6FF] flex items-center justify-center mx-auto mb-1.5 sm:mb-2 md:mb-3">
             <svg
-              className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#731EE2]"
+              className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5.5 md:h-5.5 text-[#731EE2]"
               viewBox="0 0 24 24"
               fill="currentColor"
             >
@@ -264,35 +425,38 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
             </svg>
           </div>
 
-          <h2 className="text-[16px] sm:text-[18px] font-extrabold font-headline text-[#23140D] tracking-tight leading-tight">
+          <h2 className="text-[16px] sm:text-[18px] md:text-[24px] font-extrabold font-headline text-[#23140D] tracking-tight leading-tight">
             Request Custom Cake Design
           </h2>
-          <p className="text-[10.5px] sm:text-[11px] text-[#6E6764] mt-0.5 max-w-[290px] mx-auto leading-snug">
+          <p className="text-[10.5px] sm:text-[11px] md:text-[13.5px] text-[#6E6764] mt-0.5 md:mt-1.5 max-w-[290px] md:max-w-[440px] mx-auto leading-snug md:leading-relaxed">
             Tell us your vision and our master pastry chef will get back to you within 2 hours.
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-2.5">
+        <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-2.5 md:space-y-4">
           {/* Your Full Name */}
           <div>
-            <label className="block text-[10.5px] sm:text-[11px] font-bold text-[#3F3A37] mb-0.5">
+            <label className="block text-[10.5px] sm:text-[11px] md:text-xs font-bold text-[#3F3A37] mb-0.5 md:mb-1.5">
               Your Full Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               required
               value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              onChange={(e) => {
+                hasManuallyEditedNameRef.current = true;
+                setFullName(e.target.value);
+              }}
               placeholder="e.g. Sarah Jenkins"
-              className="w-full px-3 py-1.5 rounded-lg border border-[#E5E0DC] bg-white text-[11.5px] sm:text-xs text-[#1F1A17] placeholder:text-[#98A0AC] focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
+              className="w-full px-3 py-1.5 md:px-4 md:py-2.5 rounded-lg md:rounded-xl border border-[#E5E0DC] bg-white text-[11.5px] sm:text-xs md:text-sm text-[#1F1A17] placeholder:text-[#98A0AC] focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
             />
           </div>
 
           {/* Phone Number & Event Date */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 md:gap-4">
             <div>
-              <label className="block text-[10.5px] sm:text-[11px] font-bold text-[#3F3A37] mb-0.5">
+              <label className="block text-[10.5px] sm:text-[11px] md:text-xs font-bold text-[#3F3A37] mb-0.5 md:mb-1.5">
                 Phone Number <span className="text-red-500">*</span>
               </label>
               <input
@@ -306,12 +470,12 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                 placeholder="e.g. 9876543210"
-                className="w-full px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#E5E0DC] bg-white text-[11px] sm:text-xs text-[#1F1A17] placeholder:text-[#98A0AC] focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
+                className="w-full px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2.5 rounded-lg md:rounded-xl border border-[#E5E0DC] bg-white text-[11px] sm:text-xs md:text-sm text-[#1F1A17] placeholder:text-[#98A0AC] focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-[10.5px] sm:text-[11px] font-bold text-[#3F3A37] mb-0.5">
+              <label className="block text-[10.5px] sm:text-[11px] md:text-xs font-bold text-[#3F3A37] mb-0.5 md:mb-1.5">
                 Event Date <span className="text-red-500">*</span>
               </label>
               <input
@@ -319,14 +483,14 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
                 required
                 value={eventDate}
                 onChange={(e) => setEventDate(e.target.value)}
-                className="w-full px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#E5E0DC] bg-white text-[11px] sm:text-xs text-[#1F1A17] placeholder:text-[#98A0AC] focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
+                className="w-full px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2.5 rounded-lg md:rounded-xl border border-[#E5E0DC] bg-white text-[11px] sm:text-xs md:text-sm text-[#1F1A17] placeholder:text-[#98A0AC] focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
               />
             </div>
           </div>
 
           {/* Design Notes or Theme Idea */}
           <div>
-            <label className="block text-[10.5px] sm:text-[11px] font-bold text-[#3F3A37] mb-0.5">
+            <label className="block text-[10.5px] sm:text-[11px] md:text-xs font-bold text-[#3F3A37] mb-0.5 md:mb-1.5">
               Design Notes or Theme Idea <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -337,17 +501,21 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
                 setDesignNotes(e.target.value);
                 if (uploadError) setUploadError(null);
               }}
-              placeholder="Describe your dream cake’s design, colors, flavors, tiers, theme, or special details..."
-              className="w-full px-3 py-1.5 rounded-lg border border-[#E5E0DC] bg-white text-[11.5px] sm:text-xs text-[#1F1A17] placeholder:text-[#98A0AC] resize-none focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
+              placeholder={
+                designNotes
+                  ? ''
+                  : `${typedPlaceholder}${cursorVisible ? '|' : ''}`
+              }
+              className="w-full px-3 py-1.5 md:px-4 md:py-2.5 md:min-h-[88px] rounded-lg md:rounded-xl border border-[#E5E0DC] bg-white text-[11.5px] sm:text-xs md:text-sm text-[#1F1A17] placeholder:text-[#98A0AC] resize-none focus:outline-none focus:border-[#731EE2] focus:ring-2 focus:ring-[#731EE2]/15 transition-all"
             />
-            <p className="text-[10px] sm:text-[10.5px] font-medium text-[#731EE2] mt-1 leading-snug">
+            <p className="text-[10px] sm:text-[10.5px] md:text-xs font-medium text-[#731EE2] mt-1 md:mt-1.5 leading-snug">
               ✨ Inspired by a design on Pinterest? Upload your dream cake reference image below!
             </p>
           </div>
 
           {/* Drag & Drop Reference Image Box */}
           <div>
-            <label className="block text-[10.5px] sm:text-[11px] font-bold text-[#3F3A37] mb-0.5">
+            <label className="block text-[10.5px] sm:text-[11px] md:text-xs font-bold text-[#3F3A37] mb-0.5 md:mb-1.5">
               Reference Image <span className="text-red-500">*</span>
             </label>
             <input
@@ -371,25 +539,25 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`relative rounded-xl border border-dashed transition-all px-3 py-2.5 sm:py-3 flex flex-col items-center justify-center text-center cursor-pointer select-none ${
+              className={`relative rounded-xl md:rounded-2xl border border-dashed transition-all px-3 py-2.5 sm:py-3 md:px-5 md:py-5 flex flex-col items-center justify-center text-center cursor-pointer select-none ${
                 isDragging
                   ? 'border-[#731EE2] bg-[#EFE6FF]/40 ring-2 ring-[#731EE2]/20'
                   : 'border-[#DFDAD5] bg-[#FAF7F4]/90 hover:bg-[#F5EFE9] hover:border-[#731EE2]/45'
               }`}
             >
               {referencePreview ? (
-                <div className="flex flex-col items-center gap-1 w-full">
-                  <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-[#E5E0DC] shadow-xs bg-white">
+                <div className="flex flex-col items-center gap-1 md:gap-2 w-full">
+                  <div className="relative w-12 h-12 md:w-20 md:h-20 rounded-lg md:rounded-xl overflow-hidden border border-[#E5E0DC] shadow-xs bg-white">
                     <img
                       src={referencePreview}
                       alt="Reference preview"
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <p className="text-[10.5px] font-bold text-[#3F3A37] truncate max-w-[220px]">
+                  <p className="text-[10.5px] md:text-xs font-bold text-[#3F3A37] truncate max-w-[220px] md:max-w-[340px]">
                     {referenceFileName}
                   </p>
-                  <span className="text-[9.5px] font-semibold text-[#731EE2] hover:underline">
+                  <span className="text-[9.5px] md:text-[11px] font-semibold text-[#731EE2] hover:underline">
                     Click or drop another image to replace
                   </span>
                 </div>
@@ -397,16 +565,16 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
                 <>
                   {/* Purple Cloud Upload Icon */}
                   <svg
-                    className="w-5 h-5 text-[#731EE2] mb-0.5"
+                    className="w-5 h-5 md:w-7 md:h-7 text-[#731EE2] mb-0.5 md:mb-1.5"
                     viewBox="0 0 24 24"
                     fill="currentColor"
                   >
                     <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96ZM14 13v4h-4v-4H7l5-5 5 5h-3Z" />
                   </svg>
-                  <p className="text-[11px] font-bold text-[#4B4643]">
+                  <p className="text-[11px] md:text-[13px] font-bold text-[#4B4643]">
                     Click or drag reference image here <span className="text-red-500">*</span>
                   </p>
-                  <p className="text-[9.5px] text-[#8E8783]">
+                  <p className="text-[9.5px] md:text-[11px] text-[#8E8783] md:mt-0.5">
                     PNG, JPG up to 10MB (Required)
                   </p>
                 </>
@@ -414,7 +582,7 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
             </div>
 
             {uploadError && (
-              <p className="text-[10.5px] text-red-600 font-medium mt-1 text-center">
+              <p className="text-[10.5px] md:text-xs text-red-600 font-medium mt-1 text-center">
                 {uploadError}
               </p>
             )}
@@ -424,7 +592,7 @@ export const CakeConfiguratorModal: React.FC<CakeConfiguratorModalProps> = ({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-2 sm:py-2.5 rounded-lg bg-[#731EE2] hover:bg-[#6215C7] active:scale-[0.99] disabled:opacity-60 text-white font-bold text-[11.5px] sm:text-xs shadow-[0_8px_20px_-4px_rgba(115,30,226,0.45)] transition-all cursor-pointer mt-0.5"
+            className="w-full py-2 sm:py-2.5 md:py-3.5 rounded-lg md:rounded-xl bg-[#731EE2] hover:bg-[#6215C7] active:scale-[0.99] disabled:opacity-60 text-white font-bold text-[11.5px] sm:text-xs md:text-sm shadow-[0_8px_20px_-4px_rgba(115,30,226,0.45)] transition-all cursor-pointer mt-0.5 md:mt-1"
           >
             {isSubmitting ? 'Submitting Request...' : 'Submit Custom Request'}
           </button>

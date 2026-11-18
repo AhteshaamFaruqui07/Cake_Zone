@@ -80,6 +80,99 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   >('Dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All Statuses');
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playClick = () => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      // Laser / Energy Click: downward sine sweep from 800 Hz to 200 Hz over 120 ms
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(200, now + 0.12);
+
+      // Exponential volume decay over 120 ms
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.125);
+    } catch {
+      // Ignore audio errors in environments without Web Audio support
+    }
+  };
+
+  // Smooth velvet marimba/chime synthesizer for Dashboard overview controls
+  const playSmoothSound = (baseFreq = 523.25) => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+
+      // Primary soft sine tone with gentle attack (no harsh click transient) and warm upward glide
+      const oscMain = ctx.createOscillator();
+      const gainMain = ctx.createGain();
+      oscMain.type = 'sine';
+      oscMain.frequency.setValueAtTime(baseFreq, now);
+      oscMain.frequency.exponentialRampToValueAtTime(baseFreq * 1.25, now + 0.11);
+
+      gainMain.gain.setValueAtTime(0.0001, now);
+      gainMain.gain.linearRampToValueAtTime(0.14, now + 0.015);
+      gainMain.gain.exponentialRampToValueAtTime(0.0008, now + 0.22);
+
+      oscMain.connect(gainMain);
+      gainMain.connect(ctx.destination);
+      oscMain.start(now);
+      oscMain.stop(now + 0.23);
+
+      // Soft airy harmonic shimmer overtone
+      const oscHarm = ctx.createOscillator();
+      const gainHarm = ctx.createGain();
+      oscHarm.type = 'sine';
+      oscHarm.frequency.setValueAtTime(baseFreq * 2, now);
+      oscHarm.frequency.exponentialRampToValueAtTime(baseFreq * 2.5, now + 0.14);
+
+      gainHarm.gain.setValueAtTime(0.0001, now);
+      gainHarm.gain.linearRampToValueAtTime(0.04, now + 0.02);
+      gainHarm.gain.exponentialRampToValueAtTime(0.0005, now + 0.24);
+
+      oscHarm.connect(gainHarm);
+      gainHarm.connect(ctx.destination);
+      oscHarm.start(now);
+      oscHarm.stop(now + 0.25);
+    } catch {
+      // Ignore audio errors in environments without Web Audio support
+    }
+  };
   const [orders, setOrders] = useState<Order[]>([]);
   const [hasLoadedSupabaseOrders, setHasLoadedSupabaseOrders] = useState(false);
   const [loggedInUsers, setLoggedInUsers] = useState<LoggedInUserRecord[]>([]);
@@ -1469,7 +1562,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => setShowTimeframeDropdown((prev) => !prev)}
+                    onClick={() => {
+                      playSmoothSound(523.25);
+                      setShowTimeframeDropdown((prev) => !prev);
+                    }}
                     className="px-3.5 py-1.5 rounded-full bg-[#f3e8ff] hover:bg-[#e9d5ff] text-[#6d28d9] text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors cursor-pointer"
                   >
                     <span>{timeframeFilter}</span>
@@ -1516,7 +1612,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="relative flex items-center gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowDashboardMenu((prev) => !prev)}
+                  onClick={() => {
+                    playSmoothSound(587.33);
+                    setShowDashboardMenu((prev) => !prev);
+                  }}
                   className="px-4 py-1.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm sm:text-base">grid_view</span>
@@ -1525,7 +1624,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => navigateToTab('Statistics')}
+                  onClick={() => {
+                    playSmoothSound(659.25);
+                    navigateToTab('Statistics');
+                  }}
                   className="px-4 py-1.5 rounded-full bg-[#f3e8ff] hover:bg-[#e9d5ff] text-[#6d28d9] border border-[#d8b4fe] text-xs sm:text-sm font-bold flex items-center gap-2 shadow-2xs cursor-pointer transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm sm:text-base">bar_chart</span>
@@ -1653,7 +1755,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={handleCycleTimeframe}
+                    onClick={() => {
+                      playSmoothSound(554.37);
+                      handleCycleTimeframe();
+                    }}
                     className="px-3.5 py-1.5 rounded-2xl bg-[#faf5ff] hover:bg-[#f3e8ff] border border-[#f3e8ff] text-[#7c3aed] text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider leading-tight text-left shrink-0 cursor-pointer transition-colors"
                   >
                     TAP TO
@@ -1716,7 +1821,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {/* 1. Logged in user -> navigates to Customers */}
                     <button
                       type="button"
-                      onClick={() => navigateToTab('Customers')}
+                      onClick={() => {
+                        playSmoothSound(523.25);
+                        navigateToTab('Customers');
+                      }}
                       className="group flex items-center gap-2.5 sm:gap-3.5 p-1 sm:p-2 rounded-2xl hover:bg-[#f5f3ff] transition-all text-left cursor-pointer w-full min-w-0"
                     >
                       <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#f3e8ff] text-[#7c3aed] group-hover:bg-[#7c3aed] group-hover:text-white flex items-center justify-center transition-colors shrink-0">
@@ -1735,7 +1843,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {/* 2. Insert/Delete cake item -> navigates to Products */}
                     <button
                       type="button"
-                      onClick={() => navigateToTab('Products')}
+                      onClick={() => {
+                        playSmoothSound(587.33);
+                        navigateToTab('Products');
+                      }}
                       className="group flex items-center gap-2.5 sm:gap-3.5 p-1 sm:p-2 rounded-2xl hover:bg-[#f5f3ff] transition-all text-left cursor-pointer w-full min-w-0"
                     >
                       <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#f3e8ff] text-[#7c3aed] group-hover:bg-[#7c3aed] group-hover:text-white flex items-center justify-center transition-colors shrink-0">
@@ -1758,7 +1869,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {/* 3. Saved User profile -> navigates to Settings */}
                     <button
                       type="button"
-                      onClick={() => navigateToTab('Settings')}
+                      onClick={() => {
+                        playSmoothSound(659.25);
+                        navigateToTab('Settings');
+                      }}
                       className="group flex items-center gap-2.5 sm:gap-3.5 p-1 sm:p-2 rounded-2xl hover:bg-[#fef3c7]/60 transition-all text-left cursor-pointer w-full min-w-0"
                     >
                       <div className="w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#fef3c7] text-[#b45309] group-hover:bg-[#d97706] group-hover:text-white flex items-center justify-center transition-colors shrink-0">
@@ -1805,7 +1919,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-2 gap-3.5 sm:gap-5 min-w-0">
                 {/* Left Card: Total Orders -> Navigates to Order History ('Orders') */}
                 <div
-                  onClick={() => navigateToTab('Orders')}
+                  onClick={() => {
+                    playSmoothSound(493.88);
+                    navigateToTab('Orders');
+                  }}
                   className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:border-[#7c3aed]/40 hover:shadow-md transition-all flex flex-col justify-between gap-2.5 sm:gap-4 cursor-pointer group min-w-0"
                 >
                   <div className="flex items-center justify-between gap-1.5 min-w-0">
@@ -1816,6 +1933,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
+                        playSmoothSound(493.88);
                         navigateToTab('Orders');
                       }}
                       className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-[#faf5ff] group-hover:bg-[#7c3aed] text-[#7c3aed] group-hover:text-white text-[10px] sm:text-xs font-extrabold transition-colors cursor-pointer shrink-0"
@@ -1874,7 +1992,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 {/* Right Card: Satisfaction */}
-                <div className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 flex flex-col justify-between gap-2.5 sm:gap-4 min-w-0">
+                <div
+                  onClick={() => playSmoothSound(587.33)}
+                  className="bg-white rounded-[24px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 flex flex-col justify-between gap-2.5 sm:gap-4 min-w-0 cursor-pointer"
+                >
                   <div className="flex items-center justify-between gap-1.5 min-w-0">
                     <h3 className="text-xs sm:text-lg font-black text-slate-900 truncate">
                       Satisfaction
@@ -1916,7 +2037,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* BOTTOM CARD: Inspiration Gallery -> Navigates to Inspiration Gallery ('Gallery') */}
               <div
-                onClick={() => navigateToTab('Gallery')}
+                onClick={() => {
+                  playSmoothSound(659.25);
+                  navigateToTab('Gallery');
+                }}
                 className="bg-white rounded-[22px] sm:rounded-[28px] p-4 sm:p-6 shadow-sm border border-slate-100 hover:border-[#7c3aed]/40 hover:shadow-md transition-all flex items-center justify-between gap-2 sm:gap-4 cursor-pointer group min-w-0"
               >
                 <div className="space-y-0.5 sm:space-y-1 min-w-0">
@@ -1937,6 +2061,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    playSmoothSound(659.25);
                     navigateToTab('Gallery');
                   }}
                   className="text-[11px] sm:text-sm font-extrabold text-[#7c3aed] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 sm:gap-1 shrink-0 cursor-pointer"
@@ -2820,6 +2945,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   type="submit"
                   disabled={isInsertingProduct}
+                  onClick={playClick}
                   className="w-full py-3.5 px-6 rounded-xl bg-[#4c1d95] hover:bg-[#5b21b6] text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <span className="material-symbols-outlined text-base">add_shopping_cart</span>
@@ -3106,6 +3232,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="submit"
                     disabled={isInsertingGalleryItem}
+                    onClick={playClick}
                     className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-sm hover:opacity-95 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <span className="material-symbols-outlined text-sm">add_circle</span>
@@ -3384,6 +3511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               className="focus:outline-none cursor-pointer"
                             >
                               <span
+                                onClick={playClick}
                                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold transition-colors select-none ${
                                   ord.status === 'Ready'
                                     ? 'bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25'

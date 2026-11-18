@@ -902,63 +902,47 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </button>
               </div>
             ) : (
-              <>
-                <div className="space-y-4">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex gap-4 p-3 rounded-xl bg-surface-container-low border border-outline-variant/30"
-                    >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-20 h-20 rounded-lg object-cover bg-surface-container shrink-0"
-                      />
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <div className="flex justify-between items-start gap-2">
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-bold text-sm text-on-surface truncate">{item.name}</h4>
-                            {item.details && (
-                              <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                                {restoreFullUrlsInDetails(item.details, item.image)}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => onRemoveItem(item.id)}
-                            className="text-outline hover:text-error text-xs p-1 cursor-pointer shrink-0"
-                            title="Remove item"
-                          >
-                            <span className="material-symbols-outlined text-base">delete</span>
-                          </button>
+              <div className="space-y-4">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex gap-4 p-3 rounded-xl bg-surface-container-low border border-outline-variant/30"
+                  >
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-20 h-20 rounded-lg object-cover bg-surface-container shrink-0"
+                    />
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-bold text-sm text-on-surface truncate">{item.name}</h4>
+                          {item.details && (
+                            <p className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                              {restoreFullUrlsInDetails(item.details, item.image)}
+                            </p>
+                          )}
                         </div>
-
-                        {!isCustomCakeItem(item) && (
-                          <div className="flex justify-end items-center mt-2">
-                            <span className="font-bold text-sm text-primary tabular-nums">
-                              ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                        )}
+                        <button
+                          onClick={() => onRemoveItem(item.id)}
+                          className="text-outline hover:text-error text-xs p-1 cursor-pointer shrink-0"
+                          title="Remove item"
+                        >
+                          <span className="material-symbols-outlined text-base">delete</span>
+                        </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
 
-                {/* Special Instructions */}
-                <div className="space-y-2 pt-2">
-                  <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">
-                    Cake Inscription or Baker Notes
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={specialInstructions}
-                    onChange={(e) => setSpecialInstructions(e.target.value)}
-                    placeholder="e.g., 'Happy 30th Birthday Sophia!' or delivery buzzer note..."
-                    className="w-full p-2.5 text-xs bg-surface-container-low border border-outline-variant rounded-xl text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-              </>
+                      {!isCustomCakeItem(item) && (
+                        <div className="flex justify-end items-center mt-2">
+                          <span className="font-bold text-sm text-primary tabular-nums">
+                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

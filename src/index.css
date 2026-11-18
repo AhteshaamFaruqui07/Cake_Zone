@@ -127,8 +127,23 @@
   will-change: transform, filter;
 }
 
+@keyframes footer-arrow-float {
+  0%, 100% {
+    transform: translateY(2px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.footer-arrow-bounce {
+  animation: footer-arrow-float 1.6s ease-in-out infinite;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .cakezone-gentle-breathe {
+  .cakezone-gentle-breathe,
+  .footer-arrow-bounce {
     animation: none !important;
   }
 }

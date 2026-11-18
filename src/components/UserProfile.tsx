@@ -64,6 +64,69 @@ export const UserProfile: React.FC<UserProfileProps> = ({
   const formSectionRef = useRef<HTMLElement>(null);
   const ordersSectionRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Close-mic physical mouse switch click synthesizer (crisp micro-transient + tight switch thump)
+  const playMouseClickClose = () => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+
+      // 1. Crisp close-range microswitch snap (filtered short noise burst)
+      const bufferSize = Math.floor(ctx.sampleRate * 0.016);
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.28));
+      }
+
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = noiseBuffer;
+
+      const bandpass = ctx.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.frequency.setValueAtTime(2400, now);
+      bandpass.Q.setValueAtTime(1.8, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.45, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.016);
+
+      noiseSrc.connect(bandpass);
+      bandpass.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noiseSrc.start(now);
+
+      // 2. Tight close-up tactile switch housing impulse
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(95, now + 0.018);
+
+      oscGain.gain.setValueAtTime(0.28, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+
+      osc.connect(oscGain);
+      oscGain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.022);
+    } catch {
+      // Ignore audio errors in environments without Web Audio support
+    }
+  };
 
   const [currentAuthUserId, setCurrentAuthUserId] = useState<string>('');
 
@@ -1184,6 +1247,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
                 <button
                   type="submit"
                   disabled={saving}
+                  onClick={playMouseClickClose}
                   className="px-6 py-3 bg-primary text-on-primary font-headline font-semibold text-xs sm:text-sm rounded-xl shadow-md hover:bg-primary/95 transition-all cursor-pointer disabled:opacity-60 flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined text-base">save</span>
